@@ -15,7 +15,9 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_API_KEY = process.env.GROQ_API_KEY?.trim();
+console.log("🔑 Chave GROQ carregada?", !!GROQ_API_KEY);
+
 
 app.use(cors());
 app.use(express.json());

@@ -110,22 +110,52 @@ app.post("/api/knowledge",(req,res)=>{
 });
 
 // Chat API
-app.post("/api/chat", async (req,res)=>{
-  try{
+app.post("/api/chat", async (req, res) => {
+  try {
     const { message, sessionId } = req.body;
-    if(!message) return res.status(400).json({error:"Mensagem obrigatória"});
+
+    if (!message) return res.status(400).json({ error: "Mensagem obrigatória" });
+
     const sid = sessionId || "anon";
     const session = conversations.get(sid) || { history: [] };
-    if(message.toLowerCase().includes("/limpar")){ conversations.delete(sid); return res.json({message:"Conversa limpa!"}); }
-    if(message.toLowerCase().includes("/atendente")){
-      return res.json({ message:"Escolha um departamento: Vendas, Suporte ou Financeiro.", showDepartments:true });
+
+    if (message.toLowerCase().includes("/limpar")) {
+      conversations.delete(sid);
+      return res.json({ message: "Conversa limpa!" });
     }
-    const reply = await callAI(message, session.history);
-    session.history.push({role:"user", content:message}, {role:"assistant", content:reply});
+
+    if (message.toLowerCase().includes("/atendente")) {
+      return res.json({
+        message: "Escolha um departamento: Vendas, Suporte ou Financeiro.",
+        showDepartments: true
+      });
+    }
+
+    // 🔥 Aqui entra a chamada real à IA (Groq)
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+    const chatCompletion = await groq.chat.completions.create({
+      messages: [
+        { role: "system", content: "Você é o assistente oficial da BHS Eletrônica. Responda de forma técnica, clara e simpática. Use português do Brasil." },
+        ...session.history,
+        { role: "user", content: message }
+      ],
+      model: "mixtral-8x7b-32768"
+    });
+
+    const reply = chatCompletion.choices[0].message.content || "Não entendi sua mensagem.";
+
+    session.history.push({ role: "user", content: message });
+    session.history.push({ role: "assistant", content: reply });
     conversations.set(sid, session);
-    res.json({ message: reply, showDepartments:false });
-  }catch(e){ console.error(e); res.status(500).json({error:"Falha ao processar"}); }
+
+    res.json({ message: reply, showDepartments: false });
+  } catch (e) {
+    console.error("Erro no /api/chat:", e);
+    res.status(500).json({ error: "Falha ao processar a mensagem." });
+  }
 });
+
 
 // Admin landing
 app.get("/admin",(req,res)=>{

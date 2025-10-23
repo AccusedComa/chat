@@ -33,24 +33,44 @@ function readDepartments(){ try{return JSON.parse(fs.readFileSync(DATA_FILE,"utf
 function writeDepartments(v){ fs.writeFileSync(DATA_FILE, JSON.stringify(v,null,2)); }
 function readKnowledge(){ try{return fs.readFileSync(KNOWLEDGE_FILE,"utf8");}catch{return "";} }
 
-async function callAI(userMessage, history=[]) {
-  try{
+async function callAI(userMessage, history = []) {
+  try {
+    if (!GROQ_API_KEY) {
+      console.error("❌ GROQ_API_KEY ausente ou inválida");
+      return "Servidor da IA não configurado. Contate o administrador.";
+    }
+
     const messages = [
-      { role:"system", content: readKnowledge() || "Você é a assistente Bela da BHS Eletrônica. Responda em PT-BR." },
+      { role: "system", content: readKnowledge() || "Você é a assistente Bela da BHS Eletrônica. Responda em português natural e profissional." },
       ...history,
-      { role:"user", content: userMessage }
+      { role: "user", content: userMessage }
     ];
-    const resp = await fetch("https://api.groq.com/openai/v1/chat/completions",{
-      method:"POST",
-      headers:{ "Content-Type":"application/json", "Authorization":`Bearer ${GROQ_API_KEY}` },
-      body: JSON.stringify({ model:"llama-3.3-70b-versatile", messages, temperature:0.6, max_tokens:500 })
+
+    const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages,
+        temperature: 0.6,
+        max_tokens: 600
+      })
     });
-    if(!resp.ok) throw new Error("Groq "+resp.status);
+
+    if (!resp.ok) {
+      const text = await resp.text();
+      console.error("❌ Erro da API Groq:", resp.status, text);
+      throw new Error(`Groq API Error: ${resp.status}`);
+    }
+
     const data = await resp.json();
-    return data?.choices?.[0]?.message?.content ?? "Não consegui responder agora.";
-  }catch(e){
-    console.error("Groq error:", e);
-    return "Estou com dificuldades agora. Quer falar com um atendente? (/atendente)";
+    return data?.choices?.[0]?.message?.content || "Não consegui gerar uma resposta agora.";
+  } catch (e) {
+    console.error("🚨 Erro ao chamar a IA:", e);
+    return "Ops! O servidor da IA está temporariamente fora do ar. Tente novamente em instantes.";
   }
 }
 

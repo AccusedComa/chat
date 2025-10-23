@@ -1,3 +1,20 @@
+import express from "express";
+import cors from "cors";
+const app = express();
+
+app.use(cors({
+  origin: "*", // ou coloque o domínio específico do seu site, tipo:
+  // origin: "https://mastersrelogios.com.br",
+  methods: ["GET", "POST"],
+  allowedHeaders: ["Content-Type"]
+}));
+
+// permite ser carregado em iframe
+app.use((req, res, next) => {
+  res.setHeader("X-Frame-Options", "ALLOWALL");
+  next();
+});
+
 // ============================================
 // WIDGET BACKEND - BHS
 // ============================================

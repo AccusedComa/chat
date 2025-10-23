@@ -1,3 +1,5 @@
+
+
 // ============================================
 // WIDGET BACKEND - BHS
 // ============================================
@@ -8,6 +10,27 @@ import path from "path";
 import dotenv from "dotenv";
 import fetch from "node-fetch";
 import { fileURLToPath } from "url";
+
+const app = express();
+
+// ✅ Permite o acesso do seu site (Hostinger)
+app.use(cors({
+  origin: [
+    "https://mastersrelogios.com.br",
+    "https://www.mastersrelogios.com.br"
+  ],
+  methods: ["GET", "POST"],
+  allowedHeaders: ["Content-Type"]
+}));
+
+// ✅ Permite exibir o chat dentro de iframe
+app.use((req, res, next) => {
+  res.setHeader("X-Frame-Options", "ALLOWALL");
+  next();
+});
+
+app.use(express.static("public"));
+app.use(bodyParser.json());
 
 dotenv.config();
 const __filename = fileURLToPath(import.meta.url);

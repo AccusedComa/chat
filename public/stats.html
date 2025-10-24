@@ -4,114 +4,158 @@
 <meta charset="utf-8">
 <title>📊 Estatísticas - BHS</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 <style>
 body{font-family:Segoe UI,Arial,sans-serif;background:#f5f5f5;margin:0;padding:20px}
-.container{max-width:960px;margin:auto;background:#fff;border-radius:14px;padding:24px;box-shadow:0 6px 20px rgba(0,0,0,.08)}
+.container{max-width:1000px;margin:auto;background:#fff;border-radius:14px;padding:24px;box-shadow:0 6px 20px rgba(0,0,0,.08)}
 h1{margin-top:0}
-table{width:100%;border-collapse:collapse;margin-top:20px}
+table{width:100%;border-collapse:collapse;margin-top:16px}
 th,td{border-bottom:1px solid #eee;padding:10px;text-align:left}
 th{background:#f1f1f1}
 .btn{appearance:none;border:0;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:500}
 .btn.primary{background:#25D366;color:#fff}
 .btn.ghost{background:#f1f1f1;color:#111}
-.row{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
-select,input[type="date"]{padding:8px 10px;border:1px solid #ccc;border-radius:8px}
-canvas{margin-top:20px;max-height:320px}
+.row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+select{padding:8px 10px;border:1px solid #ccc;border-radius:8px}
+canvas{margin-top:12px;max-height:320px}
+.small{color:#666;font-size:13px}
+.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
 </style>
 </head>
 <body>
 <div class="container">
   <h1>📊 Estatísticas de Cliques</h1>
-  <div class="row">
+
+  <div class="controls">
+    <label class="small">Período:</label>
     <select id="period">
       <option value="7">Últimos 7 dias</option>
       <option value="15">Últimos 15 dias</option>
       <option value="30">Últimos 30 dias</option>
       <option value="all">Todo o histórico</option>
     </select>
-    <button class="btn ghost" onclick="loadStats()">🔄 Atualizar</button>
-    <button class="btn primary" onclick="exportCSV()">📤 Exportar CSV</button>
-    <button class="btn primary" onclick="clearStats()">🗑️ Limpar</button>
+
+    <label class="small">Top N (barras):</label>
+    <select id="topN">
+      <option value="10" selected>Top 10</option>
+      <option value="20">Top 20</option>
+      <option value="50">Top 50</option>
+      <option value="all">Todos</option>
+    </select>
+
+    <button class="btn ghost" id="btnRefresh">🔄 Atualizar</button>
+    <button class="btn primary" id="btnCsv">📤 Exportar CSV</button>
+    <button class="btn primary" id="btnPdf">🖨️ Gerar PDF</button>
+    <button class="btn primary" id="btnClear">🗑️ Limpar</button>
   </div>
 
   <p id="info"></p>
-  <canvas id="chart"></canvas>
+
+  <canvas id="barChart"></canvas>
+  <canvas id="pieChart"></canvas>
 
   <table id="tbl">
-    <thead><tr><th>Tipo</th><th>Nome / Mensagem</th><th>Quantidade</th></tr></thead>
+    <thead><tr><th>Tipo</th><th>Nome / Mensagem</th><th>Quantidade</th><th>Último registro</th></tr></thead>
     <tbody></tbody>
   </table>
-
-  <canvas id="pieChart"></canvas>
 </div>
 
 <script>
-let lastData = [];
+let fullData = [];     // resposta completa do backend (grouped)
+let filtered = [];     // após filtro por período
+let topForBar = [];    // top N para gráfico de barras
 
-async function loadStats(){
-  const r = await fetch('/api/stats');
-  const data = await r.json();
-  const all = data.grouped || [];
+const periodEl = document.getElementById('period');
+const topNEl = document.getElementById('topN');
 
-  const days = document.getElementById('period').value;
+let barChart, pieChart;
+
+function byCountDesc(a,b){ return b.count - a.count; }
+
+function applyFilters(){
+  const days = periodEl.value;
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - (days === 'all' ? 9999 : parseInt(days)));
 
-  // Filtrar por período
-  const filtered = all.filter(r=>{
+  // filtra por período
+  filtered = fullData.filter(r=>{
     const ts = new Date(r.timestamp || Date.now());
     return ts >= cutoff;
   });
 
-  // Atualizar tabela
+  // ordena por count desc
+  filtered.sort(byCountDesc);
+
+  // limita para Top N na barra
+  const topNVal = topNEl.value === 'all' ? filtered.length : parseInt(topNEl.value);
+  topForBar = filtered.slice(0, topNVal);
+}
+
+async function loadStats(){
+  const r = await fetch('/api/stats');
+  const data = await r.json();
+  fullData = (data.grouped || []).map(row => ({
+    ...row,
+    // garante timestamp válido
+    timestamp: row.timestamp || new Date().toISOString()
+  }));
+
+  applyFilters();
+  renderTable();
+  renderCharts();
+  document.getElementById('info').textContent =
+    `Registros no período: ${filtered.length} | (Período: ${periodEl.value==='all'?'histórico completo':periodEl.value+' dias'})`;
+}
+
+function renderTable(){
   const tbody = document.querySelector('#tbl tbody');
   tbody.innerHTML='';
   filtered.forEach(row=>{
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${row.type}</td><td>${row.label}</td><td>${row.count}</td>`;
+    tr.innerHTML=`<td>${row.type}</td><td>${row.label}</td><td>${row.count}</td><td>${new Date(row.timestamp).toLocaleString()}</td>`;
     tbody.appendChild(tr);
   });
-
-  // Dados pro gráfico
-  const labels = filtered.map(r=>`${r.label} (${r.type})`);
-  const values = filtered.map(r=>r.count);
-
-  if(window.barChart) window.barChart.destroy();
-  const ctx=document.getElementById('chart').getContext('2d');
-  window.barChart=new Chart(ctx,{
-    type:'bar',
-    data:{labels,datasets:[{label:'Interações',data:values,backgroundColor:'#25D366'}]},
-    options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}
-  });
-
-  // Pie Chart - Top 5
-  const top5 = filtered.slice(0,5);
-  if(window.pieChart) window.pieChart.destroy();
-  const pieCtx=document.getElementById('pieChart').getContext('2d');
-  window.pieChart=new Chart(pieCtx,{
-    type:'pie',
-    data:{
-      labels:top5.map(r=>r.label),
-      datasets:[{data:top5.map(r=>r.count),backgroundColor:['#25D366','#128C7E','#075E54','#34B7F1','#DCF8C6']}]
-    },
-    options:{plugins:{title:{display:true,text:'Top 5 mais clicados'}}}
-  });
-
-  document.getElementById('info').textContent=`Total: ${filtered.length} registros (${days==='all'?'todo o histórico':`últimos ${days} dias`})`;
-  lastData = filtered;
 }
 
-async function clearStats(){
-  if(!confirm('Apagar todo o histórico?'))return;
-  await fetch('/api/stats',{method:'DELETE'});
-  loadStats();
+function renderCharts(){
+  // ---- Bar (Top N) ----
+  const barLabels = topForBar.map(r=>`${r.label} (${r.type})`);
+  const barValues = topForBar.map(r=>r.count);
+
+  if(barChart) barChart.destroy();
+  const barCtx=document.getElementById('barChart').getContext('2d');
+  barChart=new Chart(barCtx,{
+    type:'bar',
+    data:{labels:barLabels,datasets:[{label:'Interações (Top N)',data:barValues,backgroundColor:'#25D366'}]},
+    options:{
+      plugins:{legend:{display:false}},
+      scales:{y:{beginAtZero:true}},
+      animation:false
+    }
+  });
+
+  // ---- Pie (Top 5) ----
+  const top5 = filtered.slice(0,5);
+  const pieLabels = top5.map(r=>r.label);
+  const pieValues = top5.map(r=>r.count);
+  if(pieChart) pieChart.destroy();
+  const pieCtx=document.getElementById('pieChart').getContext('2d');
+  pieChart=new Chart(pieCtx,{
+    type:'pie',
+    data:{
+      labels:pieLabels,
+      datasets:[{data:pieValues,backgroundColor:['#25D366','#128C7E','#075E54','#34B7F1','#DCF8C6']}]
+    },
+    options:{plugins:{title:{display:true,text:'Top 5 mais clicados'}}, animation:false}
+  });
 }
 
 function exportCSV(){
-  if(!lastData.length){alert('Nenhum dado para exportar.');return;}
-  let csv='Tipo,Nome/Mensagem,Quantidade,Data\n';
-  lastData.forEach(r=>{
-    const line=`"${r.type}","${r.label.replace(/"/g,'""')}","${r.count}","${r.timestamp}"`;
+  if(!filtered.length){alert('Nenhum dado para exportar.');return;}
+  let csv='Tipo,Nome/Mensagem,Quantidade,UltimoRegistro\n';
+  filtered.forEach(r=>{
+    const line=`"${r.type}","${String(r.label||'').replace(/"/g,'""')}","${r.count}","${r.timestamp}"`;
     csv+=line+'\n';
   });
   const blob=new Blob([csv],{type:'text/csv'});
@@ -119,11 +163,54 @@ function exportCSV(){
   const a=document.createElement('a');
   a.href=url;
   a.download=`bhs-stats-${new Date().toISOString().slice(0,10)}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+async function exportPDF(){
+  if(!filtered.length){alert('Nenhum dado para exportar.');return;}
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({orientation:'p', unit:'pt', format:'a4'});
+
+  // Título
+  doc.setFontSize(16);
+  doc.text('Relatório de Estatísticas - BHS', 40, 40);
+  doc.setFontSize(10);
+  doc.text(`Gerado em: ${new Date().toLocaleString()}`, 40, 60);
+  doc.text(`Período: ${periodEl.value==='all' ? 'Histórico completo' : 'Últimos '+periodEl.value+' dias'}`, 40, 76);
+
+  // Gráfico de Barras
+  const barImg = document.getElementById('barChart').toDataURL('image/png', 1.0);
+  doc.addImage(barImg, 'PNG', 40, 90, 515, 200); // largura ~515pt para caber na A4 com margens
+
+  // Gráfico de Pizza
+  const pieImg = document.getElementById('pieChart').toDataURL('image/png', 1.0);
+  doc.addImage(pieImg, 'PNG', 40, 300, 250, 200);
+
+  // Tabela (Top N)
+  const tableRows = topForBar.map(r => [r.type, r.label, r.count, new Date(r.timestamp).toLocaleString()]);
+  doc.autoTable({
+    startY: 520,
+    head: [['Tipo', 'Nome/Mensagem', 'Quantidade', 'Último registro']],
+    body: tableRows,
+    theme: 'grid',
+    styles: { fontSize: 9, cellPadding: 4 }
+  });
+
+  doc.save(`bhs-relatorio-${new Date().toISOString().slice(0,10)}.pdf`);
+}
+
+// eventos
+document.getElementById('btnRefresh').addEventListener('click', ()=>{ applyFilters(); renderTable(); renderCharts(); });
+document.getElementById('btnCsv').addEventListener('click', exportCSV);
+document.getElementById('btnPdf').addEventListener('click', exportPDF);
+document.getElementById('btnClear').addEventListener('click', async ()=>{
+  if(!confirm('Apagar todo o histórico?'))return;
+  await fetch('/api/stats',{method:'DELETE'});
+  await loadStats();
+});
+periodEl.addEventListener('change', ()=>{ applyFilters(); renderTable(); renderCharts(); });
+topNEl.addEventListener('change', ()=>{ applyFilters(); renderTable(); renderCharts(); });
 
 loadStats();
 </script>

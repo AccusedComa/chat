@@ -8,5 +8,65 @@
     "type": "ai_message",
     "message": "Quero saber algo",
     "timestamp": "2025-10-23T16:56:05.000Z"
+  },
+  {
+    "type": "button",
+    "label": "Vendas",
+    "timestamp": "2025-10-24T14:02:20.079Z"
+  },
+  {
+    "type": "ai_message",
+    "message": "Oi",
+    "timestamp": "2025-10-24T14:02:25.354Z"
+  },
+  {
+    "type": "ai_message",
+    "message": "Falar com vendas",
+    "timestamp": "2025-10-24T14:02:33.816Z"
+  },
+  {
+    "type": "ai_message",
+    "message": "Trafos, preciso de preço",
+    "timestamp": "2025-10-24T14:02:47.540Z"
+  },
+  {
+    "type": "ai_message",
+    "message": "Preicso de um de 20A",
+    "timestamp": "2025-10-24T14:03:07.313Z"
+  },
+  {
+    "type": "ai_message",
+    "message": "Mentira, você não sabe preços. Não pode passar valores por aqui",
+    "timestamp": "2025-10-24T14:03:28.074Z"
+  },
+  {
+    "type": "ai_message",
+    "message": "Me manda o telefone de vendas",
+    "timestamp": "2025-10-24T14:03:38.974Z"
+  },
+  {
+    "type": "ai_message",
+    "message": "Porque não colocou com link?",
+    "timestamp": "2025-10-24T14:03:50.030Z"
+  },
+  {
+    "type": "ai_message",
+    "message": "Esses numeros são fictícios... porque você não está obedecendo ao treinamento?",
+    "timestamp": "2025-10-24T14:04:12.788Z"
+  },
+  {
+    "type": "ai_message",
+    "message": "Vamos recomeçar?",
+    "timestamp": "2025-10-24T14:05:57.377Z"
+  },
+  {
+    "type": "ai_message",
+    "message": "|Isso mesmo",
+    "timestamp": "2025-10-24T14:06:04.633Z"
+  },
+  {
+    "type": "ai_message",
+    "message": "Me passa o numero de vendas por favor",
+    "timestamp": "2025-10-24T14:06:17.005Z"
   }
 ]

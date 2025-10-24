@@ -49,35 +49,49 @@ const btn=document.getElementById('chat-btn'),
       send=document.getElementById('send');
 
 const sessionId=Math.random().toString(36).slice(2,10);
-const enableTypingSound = true;  // desligar som = false
-const enableVibration = true;    // desligar vibração = false
 
-// ========= SOM DE DIGITAÇÃO =========
-let audioCtx, tickBuffer;
-async function loadTypingSound(){
+// ====== CONFIGURAÇÕES ======
+const enableTypingSound = true;   // som durante digitação da IA
+const enableSendSound = true;     // som de envio
+const enableReceiveSound = true;  // som de chegada da mensagem
+const enableVibration = true;     // vibrações
+
+// ====== SONS ======
+let audioCtx, tickBuffer, sendBuffer, receiveBuffer;
+
+async function loadSounds(){
   try {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const res = await fetch("https://cdn.jsdelivr.net/gh/terkelg/soundbank/sounds/typewriter-key.wav");
-    const arrayBuffer = await res.arrayBuffer();
-    tickBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-  } catch(e){ console.warn("Erro ao carregar som:", e); }
-}
-function playTypingSound(){
-  if (!enableTypingSound || !audioCtx || !tickBuffer) return;
-  const source = audioCtx.createBufferSource();
-  source.buffer = tickBuffer;
-  const gainNode = audioCtx.createGain();
-  gainNode.gain.value = 0.05; // volume leve
-  source.connect(gainNode).connect(audioCtx.destination);
-  source.start(0);
+    // som de digitação
+    const typeRes = await fetch("https://cdn.jsdelivr.net/gh/terkelg/soundbank/sounds/typewriter-key.wav");
+    tickBuffer = await audioCtx.decodeAudioData(await typeRes.arrayBuffer());
+    // som de envio
+    const sendRes = await fetch("https://cdn.jsdelivr.net/gh/terkelg/soundbank/sounds/message-sent.wav");
+    sendBuffer = await audioCtx.decodeAudioData(await sendRes.arrayBuffer());
+    // som de recebimento
+    const recvRes = await fetch("https://cdn.jsdelivr.net/gh/terkelg/soundbank/sounds/message-received.wav");
+    receiveBuffer = await audioCtx.decodeAudioData(await recvRes.arrayBuffer());
+  } catch(e){ console.warn("Erro ao carregar sons:", e); }
 }
 
-// ========= VIBRAÇÃO =========
-function vibrate(){
-  if (enableVibration && navigator.vibrate) navigator.vibrate(30);
+function playSound(buffer, volume=0.1){
+  if (!audioCtx || !buffer) return;
+  const src = audioCtx.createBufferSource();
+  src.buffer = buffer;
+  const gain = audioCtx.createGain();
+  gain.gain.value = volume;
+  src.connect(gain).connect(audioCtx.destination);
+  src.start(0);
 }
 
-// ========= CHAT =========
+function playTypingSound(){ if (enableTypingSound) playSound(tickBuffer, 0.05); }
+function playSendSound(){ if (enableSendSound) playSound(sendBuffer, 0.15); }
+function playReceiveSound(){ if (enableReceiveSound) playSound(receiveBuffer, 0.2); }
+
+// ====== VIBRAÇÃO ======
+function vibrate(ms=30){ if (enableVibration && navigator.vibrate) navigator.vibrate(ms); }
+
+// ====== CHAT ======
 function addMsg(content,who='bot'){
   const d=document.createElement('div');
   d.className='msg '+who;
@@ -96,18 +110,21 @@ function showTyping(){
   return t;
 }
 
+// Efeito digitação gradual
 async function typeEffect(element, text, speed=25){
   element.innerHTML='';
-  const parts=text.replace(/\n/g,'<br>').split('');
-  for(let i=0;i<parts.length;i++){
-    element.innerHTML+=parts[i];
+  const chars=text.replace(/\n/g,'<br>').split('');
+  for(let i=0;i<chars.length;i++){
+    element.innerHTML+=chars[i];
     msgs.scrollTop=msgs.scrollHeight;
-    if(parts[i].trim()){
+    if(chars[i].trim()){
       playTypingSound();
-      vibrate();
+      vibrate(15);
     }
     await new Promise(r=>setTimeout(r,speed));
   }
+  playReceiveSound(); // som de chegada da resposta
+  vibrate(60);        // vibração leve ao fim
 }
 
 function setInitialMenu(deps){
@@ -144,14 +161,14 @@ async function sendToAI(message){
   return data.message;
 }
 
-// ========= EVENTOS =========
+// ====== EVENTOS ======
 btn.addEventListener('click',()=>{
   const show=chat.style.display!=='flex';
   chat.style.display=show?'flex':'none';
   if(show){
     badge.style.display='none';
     if(!options.children.length) loadMenu();
-    if(!tickBuffer) loadTypingSound();
+    if(!tickBuffer) loadSounds();
   }
 });
 
@@ -161,6 +178,8 @@ send.addEventListener('click',async()=>{
   const m=text.value.trim();
   if(!m) return;
   addMsg(m,'user');
+  playSendSound();
+  vibrate(40);
   text.value='';
 
   if(options.style.display!=='none'){

@@ -1,92 +1,42 @@
 [
   {
     "type": "button",
-    "label": "Suporte",
-    "timestamp": "2025-10-23T16:55:00.000Z"
+    "label": "Vendas",
+    "timestamp": "2025-10-24T14:09:53.214Z"
   },
   {
     "type": "ai_message",
-    "message": "Quero saber algo",
-    "timestamp": "2025-10-23T16:56:05.000Z"
+    "message": "Oie",
+    "timestamp": "2025-10-24T14:09:53.489Z"
   },
   {
     "type": "button",
     "label": "Vendas",
-    "timestamp": "2025-10-24T14:02:20.079Z"
+    "timestamp": "2025-10-24T14:24:17.285Z"
   },
   {
     "type": "ai_message",
-    "message": "Oi",
-    "timestamp": "2025-10-24T14:02:25.354Z"
+    "message": "Oi tudo bem?",
+    "timestamp": "2025-10-24T14:24:24.846Z"
   },
   {
     "type": "ai_message",
-    "message": "Falar com vendas",
-    "timestamp": "2025-10-24T14:02:33.816Z"
+    "message": "Manda o link pr amim?",
+    "timestamp": "2025-10-24T14:24:29.381Z"
   },
   {
     "type": "ai_message",
-    "message": "Trafos, preciso de preço",
-    "timestamp": "2025-10-24T14:02:47.540Z"
+    "message": "Link do site filha",
+    "timestamp": "2025-10-24T14:24:35.375Z"
   },
   {
-    "type": "ai_message",
-    "message": "Preicso de um de 20A",
-    "timestamp": "2025-10-24T14:03:07.313Z"
+    "type": "message",
+    "label": "Olá",
+    "timestamp": "2025-10-24T14:25:32.727Z"
   },
   {
-    "type": "ai_message",
-    "message": "Mentira, você não sabe preços. Não pode passar valores por aqui",
-    "timestamp": "2025-10-24T14:03:28.074Z"
-  },
-  {
-    "type": "ai_message",
-    "message": "Me manda o telefone de vendas",
-    "timestamp": "2025-10-24T14:03:38.974Z"
-  },
-  {
-    "type": "ai_message",
-    "message": "Porque não colocou com link?",
-    "timestamp": "2025-10-24T14:03:50.030Z"
-  },
-  {
-    "type": "ai_message",
-    "message": "Esses numeros são fictícios... porque você não está obedecendo ao treinamento?",
-    "timestamp": "2025-10-24T14:04:12.788Z"
-  },
-  {
-    "type": "ai_message",
-    "message": "Vamos recomeçar?",
-    "timestamp": "2025-10-24T14:05:57.377Z"
-  },
-  {
-    "type": "ai_message",
-    "message": "|Isso mesmo",
-    "timestamp": "2025-10-24T14:06:04.633Z"
-  },
-  {
-    "type": "ai_message",
-    "message": "Me passa o numero de vendas por favor",
-    "timestamp": "2025-10-24T14:06:17.005Z"
-  },
-  {
-    "type": "ai_message",
-    "message": "Qual seu nome?",
-    "timestamp": "2025-10-24T14:07:14.940Z"
-  },
-  {
-    "type": "ai_message",
-    "message": "Qual o telefone de vendas?",
-    "timestamp": "2025-10-24T14:07:23.654Z"
-  },
-  {
-    "type": "ai_message",
-    "message": "E do comercial?",
-    "timestamp": "2025-10-24T14:07:35.794Z"
-  },
-  {
-    "type": "ai_message",
-    "message": "Mentrira, esse não é o numero da BHS",
-    "timestamp": "2025-10-24T14:07:56.527Z"
+    "type": "message",
+    "label": "Tem papel aí?",
+    "timestamp": "2025-10-24T14:25:39.203Z"
   }
 ]

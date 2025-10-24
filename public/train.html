@@ -1,78 +1,39 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Treinar IA - BHS</title>
+<meta charset="utf-8">
+<title>🤖 Treinar IA - BHS</title>
 <style>
-  :root{--green:#25D366}
-  *{box-sizing:border-box}
-  body{font-family:Segoe UI,Arial,sans-serif;background:#f5f5f5;margin:0;padding:20px}
-  .container{max-width:960px;margin:auto;background:#fff;border-radius:14px;padding:24px;box-shadow:0 6px 20px rgba(0,0,0,.08)}
-  .topbar{display:flex;align-items:center;gap:12px;margin-bottom:12px}
-  .back{appearance:none;border:0;background:#eee;color:#111;border-radius:10px;padding:8px 12px;cursor:pointer}
-  h1{margin:6px 0 16px}
-  textarea{width:100%;min-height:400px;padding:12px;border:1px solid #ddd;border-radius:10px;font-family:Consolas,monospace;font-size:14px;resize:vertical}
-  .actions{display:flex;gap:10px;margin-top:12px}
-  .btn{appearance:none;border:0;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:500}
-  .btn.primary{background:var(--green);color:#fff}
-  .btn.ghost{background:#f1f1f1;color:#111}
-  #msg{margin-top:12px;font-size:14px;color:#0b8043;font-weight:500}
+body{font-family:Segoe UI,Arial,sans-serif;background:#f5f5f5;margin:0;padding:20px}
+.container{max-width:900px;margin:auto;background:#fff;border-radius:14px;padding:24px;box-shadow:0 6px 20px rgba(0,0,0,.08)}
+h1{margin-top:0}
+textarea{width:100%;height:420px;padding:12px;border:1px solid #ddd;border-radius:10px;font-family:monospace;font-size:14px}
+.btn{appearance:none;border:0;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:500;margin-top:12px}
+.btn.primary{background:#25D366;color:#fff}
+.msg{margin-top:10px;color:#1c7a3e;font-weight:bold}
 </style>
 </head>
 <body>
-  <div class="container">
-    <div class="topbar">
-      <button class="back" onclick="location.href='/admin'">⬅️ Voltar</button>
-      <h1>🤖 Treinar IA</h1>
-    </div>
-    <p style="color:#555">Edite abaixo as informações que a assistente Bela deve usar como base de conhecimento.<br>
-    Exemplo: produtos, políticas de troca, horário de atendimento, contatos, etc.</p>
-
-    <textarea id="content" placeholder="Digite aqui o conteúdo do treinamento..."></textarea>
-
-    <div class="actions">
-      <button class="btn ghost" id="reload">Recarregar</button>
-      <button class="btn primary" id="save">Salvar treinamento</button>
-    </div>
-    <div id="msg"></div>
-  </div>
+<div class="container">
+  <h1>🤖 Treinar IA</h1>
+  <p>Edite abaixo o conteúdo de conhecimento base da assistente Bela e clique em <b>Salvar</b> para atualizar a IA imediatamente.</p>
+  <textarea id="txt"></textarea>
+  <button class="btn primary" onclick="save()">💾 Salvar</button>
+  <div id="msg" class="msg"></div>
+</div>
 
 <script>
-const contentEl=document.getElementById('content');
-const msgEl=document.getElementById('msg');
-
-function showMsg(txt,ok=true){
-  msgEl.style.color=ok?"#0b8043":"#c62828";
-  msgEl.textContent=txt;
-  setTimeout(()=>msgEl.textContent="",3000);
-}
-
 async function load(){
-  try{
-    const txt=await fetch('/api/knowledge').then(r=>r.text());
-    contentEl.value=txt||"";
-    showMsg("Conteúdo carregado!");
-  }catch(e){
-    showMsg("Erro ao carregar conhecimento.",false);
-  }
+  const r=await fetch('/api/knowledge');
+  document.getElementById('txt').value=await r.text();
 }
-
 async function save(){
-  try{
-    await fetch('/api/knowledge',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({content:contentEl.value})
-    });
-    showMsg("✅ Treinamento salvo com sucesso!");
-  }catch(e){
-    showMsg("Erro ao salvar.",false);
-  }
+  const content=document.getElementById('txt').value;
+  const r=await fetch('/api/knowledge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content})});
+  const data=await r.json();
+  document.getElementById('msg').textContent=data.msg || 'Erro ao salvar.';
+  setTimeout(()=>document.getElementById('msg').textContent='',4000);
 }
-
-document.getElementById('reload').onclick=load;
-document.getElementById('save').onclick=save;
 load();
 </script>
 </body>

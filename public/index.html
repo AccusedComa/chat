@@ -49,24 +49,65 @@ const btn=document.getElementById('chat-btn'),
       send=document.getElementById('send');
 
 const sessionId=Math.random().toString(36).slice(2,10);
+const enableTypingSound = true;  // desligar som = false
+const enableVibration = true;    // desligar vibração = false
 
-// =========== Funções ===========
+// ========= SOM DE DIGITAÇÃO =========
+let audioCtx, tickBuffer;
+async function loadTypingSound(){
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const res = await fetch("https://cdn.jsdelivr.net/gh/terkelg/soundbank/sounds/typewriter-key.wav");
+    const arrayBuffer = await res.arrayBuffer();
+    tickBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+  } catch(e){ console.warn("Erro ao carregar som:", e); }
+}
+function playTypingSound(){
+  if (!enableTypingSound || !audioCtx || !tickBuffer) return;
+  const source = audioCtx.createBufferSource();
+  source.buffer = tickBuffer;
+  const gainNode = audioCtx.createGain();
+  gainNode.gain.value = 0.05; // volume leve
+  source.connect(gainNode).connect(audioCtx.destination);
+  source.start(0);
+}
+
+// ========= VIBRAÇÃO =========
+function vibrate(){
+  if (enableVibration && navigator.vibrate) navigator.vibrate(30);
+}
+
+// ========= CHAT =========
 function addMsg(content,who='bot'){
   const d=document.createElement('div');
   d.className='msg '+who;
-  d.innerHTML=content.replace(/\n/g, '<br>'); // quebra de linha
+  d.innerHTML=content.replace(/\n/g,'<br>');
   msgs.appendChild(d);
   msgs.scrollTop=msgs.scrollHeight;
+  return d;
 }
 
-// Mostra “Digitando...”
 function showTyping(){
-  const typing=document.createElement('div');
-  typing.className='msg bot typing';
-  typing.innerHTML='<i>Digitando...</i>';
-  msgs.appendChild(typing);
+  const t=document.createElement('div');
+  t.className='msg bot typing';
+  t.innerHTML='<i>Digitando...</i>';
+  msgs.appendChild(t);
   msgs.scrollTop=msgs.scrollHeight;
-  return typing;
+  return t;
+}
+
+async function typeEffect(element, text, speed=25){
+  element.innerHTML='';
+  const parts=text.replace(/\n/g,'<br>').split('');
+  for(let i=0;i<parts.length;i++){
+    element.innerHTML+=parts[i];
+    msgs.scrollTop=msgs.scrollHeight;
+    if(parts[i].trim()){
+      playTypingSound();
+      vibrate();
+    }
+    await new Promise(r=>setTimeout(r,speed));
+  }
 }
 
 function setInitialMenu(deps){
@@ -93,7 +134,6 @@ async function loadMenu(){
   addMsg('Olá! 👋 Escolha uma opção abaixo ou mande sua pergunta para a IA.');
 }
 
-// Envia para IA
 async function sendToAI(message){
   const r=await fetch('/api/chat',{
     method:'POST',
@@ -104,13 +144,14 @@ async function sendToAI(message){
   return data.message;
 }
 
-// =========== Eventos ===========
+// ========= EVENTOS =========
 btn.addEventListener('click',()=>{
   const show=chat.style.display!=='flex';
   chat.style.display=show?'flex':'none';
   if(show){
     badge.style.display='none';
     if(!options.children.length) loadMenu();
+    if(!tickBuffer) loadTypingSound();
   }
 });
 
@@ -122,7 +163,6 @@ send.addEventListener('click',async()=>{
   addMsg(m,'user');
   text.value='';
 
-  // remove botões após primeira interação
   if(options.style.display!=='none'){
     options.style.display='none';
   }
@@ -131,7 +171,8 @@ send.addEventListener('click',async()=>{
   try{
     const reply=await sendToAI(m);
     typingEl.remove();
-    addMsg(reply,'bot');
+    const bubble=addMsg('', 'bot');
+    await typeEffect(bubble, reply, 22);
   }catch{
     typingEl.remove();
     addMsg('Erro ao conectar com a IA. Tente novamente.','bot');

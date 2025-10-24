@@ -1,5 +1,5 @@
 // ============================================
-// WIDGET BACKEND - BHS v5.1
+// WIDGET BACKEND - BHS v5.2 (com Estatísticas)
 // ============================================
 import express from "express";
 import cors from "cors";
@@ -23,18 +23,25 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const DATA_FILE = path.join(__dirname, "departments.json");
 const KNOWLEDGE_FILE = path.join(__dirname, "knowledge.txt");
+const STATS_FILE = path.join(__dirname, "stats.json");
 
 if (!fs.existsSync(DATA_FILE)) fs.writeFileSync(DATA_FILE, "[]");
 if (!fs.existsSync(KNOWLEDGE_FILE)) fs.writeFileSync(KNOWLEDGE_FILE, "");
+if (!fs.existsSync(STATS_FILE)) fs.writeFileSync(STATS_FILE, "[]");
 
-function readDepartments() { try { return JSON.parse(fs.readFileSync(DATA_FILE, "utf8")); } catch { return []; } }
-function writeDepartments(v) { fs.writeFileSync(DATA_FILE, JSON.stringify(v, null, 2)); }
-function readKnowledge() { try { return fs.readFileSync(KNOWLEDGE_FILE, "utf8"); } catch { return ""; } }
+function readJSON(file) {
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); }
+  catch { return []; }
+}
+function writeJSON(file, data) {
+  fs.writeFileSync(file, JSON.stringify(data, null, 2));
+}
 
+// ----------------- AI -----------------
 async function callAI(userMessage, history = []) {
   try {
     const messages = [
-      { role: "system", content: readKnowledge() || "Você é a assistente Bela da BHS Eletrônica. Responda em PT-BR, de forma resumida e simpática." },
+      { role: "system", content: "Você é a assistente Bela da BHS Eletrônica. Responda de forma resumida, profissional e simpática em PT-BR." },
       ...history,
       { role: "user", content: userMessage }
     ];
@@ -43,119 +50,123 @@ async function callAI(userMessage, history = []) {
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_API_KEY}` },
       body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages, temperature: 0.6, max_tokens: 300 })
     });
-    if (!resp.ok) throw new Error("Groq " + resp.status);
     const data = await resp.json();
-    return data?.choices?.[0]?.message?.content ?? "Não consegui responder agora.";
-  } catch (e) {
-    console.error("Groq error:", e);
-    return "Estou com dificuldades agora. Quer falar com um atendente? (/atendente)";
+    return data?.choices?.[0]?.message?.content ?? "Desculpe, não consegui responder agora.";
+  } catch (err) {
+    console.error("Erro Groq:", err);
+    return "O servidor da IA está temporariamente fora do ar.";
   }
 }
 
-const conversations = new Map();
-
-// ---------- Departments ----------
-app.get("/api/departments", (req, res) => res.json(readDepartments()));
+// ----------------- DEPARTAMENTOS -----------------
+app.get("/api/departments", (req, res) => res.json(readJSON(DATA_FILE)));
 
 app.post("/api/departments", (req, res) => {
   const { name, phone, emoji, type } = req.body;
-  if (!name) return res.status(400).json({ error: "Nome obrigatório" });
-  const deps = readDepartments();
-  const item = {
+  if (!name) return res.status(400).json({ error: "Nome é obrigatório" });
+  const deps = readJSON(DATA_FILE);
+  const newDep = {
     id: deps.length ? Math.max(...deps.map(d => d.id)) + 1 : 1,
-    name,
-    phone: phone || null,
-    emoji: emoji || "📞",
-    type: type || "whatsapp"
+    name, phone, emoji, type
   };
-  deps.push(item); writeDepartments(deps); res.status(201).json(item);
+  deps.push(newDep);
+  writeJSON(DATA_FILE, deps);
+  res.status(201).json(newDep);
 });
 
 app.put("/api/departments/:id", (req, res) => {
   const id = parseInt(req.params.id);
-  const deps = readDepartments();
-  const i = deps.findIndex(d => d.id === id);
-  if (i === -1) return res.status(404).json({ error: "Não encontrado" });
-  deps[i] = { ...deps[i], ...req.body };
-  writeDepartments(deps);
-  res.json(deps[i]);
+  const deps = readJSON(DATA_FILE);
+  const idx = deps.findIndex(d => d.id === id);
+  if (idx === -1) return res.status(404).json({ error: "Não encontrado" });
+  deps[idx] = { ...deps[idx], ...req.body };
+  writeJSON(DATA_FILE, deps);
+  res.json(deps[idx]);
 });
 
 app.delete("/api/departments/:id", (req, res) => {
   const id = parseInt(req.params.id);
-  const deps = readDepartments();
-  const i = deps.findIndex(d => d.id === id);
-  if (i === -1) return res.status(404).json({ error: "Não encontrado" });
-  const removed = deps.splice(i, 1)[0];
-  writeDepartments(deps);
-  res.json({ ok: true, removed });
+  const deps = readJSON(DATA_FILE);
+  const idx = deps.findIndex(d => d.id === id);
+  if (idx === -1) return res.status(404).json({ error: "Não encontrado" });
+  deps.splice(idx, 1);
+  writeJSON(DATA_FILE, deps);
+  res.json({ ok: true });
 });
 
-// ---------- Corrigido: Salvar ordem (POST + PUT) ----------
-async function handleSaveOrder(req, res) {
+app.post("/api/departments/order", (req, res) => {
   try {
     let { order } = req.body;
-    if (!Array.isArray(order)) return res.status(400).json({ ok: false, error: "Formato inválido: 'order' deve ser array" });
-    const orderNums = order.map(id => Number(id)).filter(n => !Number.isNaN(n));
-    if (orderNums.length !== order.length) return res.status(400).json({ ok: false, error: "IDs inválidos" });
-
-    const deps = readDepartments();
-    const pos = new Map(orderNums.map((id, ix) => [id, ix]));
+    const deps = readJSON(DATA_FILE);
+    const orderNums = order.map(Number);
+    const pos = new Map(orderNums.map((id, i) => [id, i]));
     deps.sort((a, b) => (pos.get(a.id) ?? 0) - (pos.get(b.id) ?? 0));
-    writeDepartments(deps);
-    console.log("✅ Ordem salva:", orderNums);
+    writeJSON(DATA_FILE, deps);
     res.json({ ok: true });
-  } catch (e) {
-    console.error("Erro ao salvar ordem:", e);
-    res.status(500).json({ ok: false, error: "Falha ao salvar ordem" });
+  } catch (err) {
+    res.status(500).json({ error: "Falha ao salvar ordem" });
   }
-}
-app.put("/api/departments/order", handleSaveOrder);
-app.post("/api/departments/order", handleSaveOrder);
-
-// ---------- Knowledge ----------
-app.get("/api/knowledge", (req, res) => res.send(readKnowledge()));
-app.post("/api/knowledge", (req, res) => {
-  try { const { content } = req.body; fs.writeFileSync(KNOWLEDGE_FILE, content ?? "", "utf8"); res.json({ ok: true }); }
-  catch (e) { res.status(500).json({ error: String(e) }); }
 });
 
-// ---------- Chat ----------
+// ----------------- CHAT -----------------
+const sessions = new Map();
 app.post("/api/chat", async (req, res) => {
-  try {
-    const { message, sessionId } = req.body;
-    if (!message) return res.status(400).json({ error: "Mensagem obrigatória" });
-    const sid = sessionId || "anon";
-    const session = conversations.get(sid) || { history: [] };
-    if (message.toLowerCase().includes("/limpar")) { conversations.delete(sid); return res.json({ message: "Conversa limpa!" }); }
-    if (message.toLowerCase().includes("/atendente")) {
-      return res.json({ message: "Escolha um departamento: Vendas, Suporte ou Financeiro.", showDepartments: true });
-    }
-    const reply = await callAI(message, session.history);
-    session.history.push({ role: "user", content: message }, { role: "assistant", content: reply });
-    conversations.set(sid, session);
-    res.json({ message: reply, showDepartments: false });
-  } catch (e) { console.error(e); res.status(500).json({ error: "Falha ao processar" }); }
+  const { message, sessionId } = req.body;
+  if (!message) return res.status(400).json({ error: "Mensagem obrigatória" });
+
+  const sid = sessionId || "anon";
+  const session = sessions.get(sid) || { history: [] };
+  const reply = await callAI(message, session.history);
+  session.history.push({ role: "user", content: message }, { role: "assistant", content: reply });
+  sessions.set(sid, session);
+
+  // salva estatística de mensagem
+  const stats = readJSON(STATS_FILE);
+  stats.push({ type: "ai_message", message, timestamp: new Date().toISOString() });
+  writeJSON(STATS_FILE, stats);
+
+  res.json({ message: reply });
 });
 
-// ---------- Admin ----------
+// ----------------- ESTATÍSTICAS -----------------
+app.post("/api/stats/add", (req, res) => {
+  const { type, label } = req.body;
+  if (!type) return res.status(400).json({ error: "Tipo obrigatório" });
+  const stats = readJSON(STATS_FILE);
+  stats.push({ type, label, timestamp: new Date().toISOString() });
+  writeJSON(STATS_FILE, stats);
+  res.json({ ok: true });
+});
+
+app.get("/api/stats", (req, res) => {
+  const stats = readJSON(STATS_FILE);
+  const summary = {};
+  for (const s of stats) {
+    if (!summary[s.label]) summary[s.label] = 0;
+    summary[s.label]++;
+  }
+  res.json({ total: stats.length, summary, stats });
+});
+
+app.delete("/api/stats", (req, res) => {
+  writeJSON(STATS_FILE, []);
+  res.json({ ok: true });
+});
+
+// ----------------- ADMIN -----------------
 app.get("/admin", (req, res) => {
-  res.send(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Admin - BHS</title>
-  <style>body{font-family:Segoe UI,Arial;background:#f5f5f5;margin:0;padding:20px}.wrap{max-width:920px;margin:auto}
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}
-  .card{background:#fff;border-radius:14px;padding:24px;box-shadow:0 6px 24px rgba(0,0,0,.08);text-decoration:none;color:#111;display:block}
-  .card:hover{transform:translateY(-3px);box-shadow:0 10px 30px rgba(0,0,0,.12)}h1{margin-top:0}</style></head>
-  <body><div class="wrap"><h1>🛠️ Administração</h1>
-  <div class="grid">
-    <a class="card" href="/departments.html">📱 Departamentos</a>
-    <a class="card" href="/train.html">🤖 Treinar IA</a>
-  </div></div></body></html>`);
+  res.send(`
+    <!doctype html><html><head><meta charset="utf-8"/><title>Admin - BHS</title>
+    <style>body{font-family:Segoe UI,Arial;background:#f5f5f5;margin:0;padding:20px}
+    .wrap{max-width:920px;margin:auto}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}
+    .card{background:#fff;border-radius:14px;padding:24px;box-shadow:0 6px 24px rgba(0,0,0,.08);text-decoration:none;color:#111;display:block}
+    .card:hover{transform:translateY(-3px);box-shadow:0 10px 30px rgba(0,0,0,.12)}h1{margin-top:0}</style></head>
+    <body><div class="wrap"><h1>🛠️ Administração</h1>
+    <div class="grid">
+      <a class="card" href="/departments.html">📱 Departamentos</a>
+      <a class="card" href="/train.html">🤖 Treinar IA</a>
+      <a class="card" href="/stats.html">📊 Estatísticas</a>
+    </div></div></body></html>`);
 });
 
-// ---------- Root ----------
-app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
-
-app.listen(PORT, () => {
-  console.log(`🚀 Widget rodando em http://localhost:${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 BHS rodando em http://localhost:${PORT}`));

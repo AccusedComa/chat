@@ -1,5 +1,8 @@
 <!DOCTYPE html>
-<html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Widget BHS</title>
 <style>
 body{font-family:Arial,Helvetica,sans-serif;margin:0}
@@ -18,7 +21,8 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0}
 .opt:hover{background:#fff}
 #input{display:flex;border-top:1px solid #ddd} #text{flex:1;padding:12px;border:0;outline:none} #send{background:#25D366;color:#fff;border:0;padding:0 16px;cursor:pointer}
 .small{font-size:12px;color:#666}
-</style></head>
+</style>
+</head>
 <body>
 <div id="chat-btn" title="Fale conosco">
   <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -26,23 +30,98 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0}
   </svg>
   <span id="badge">1</span>
 </div>
+
 <div id="chat">
   <div id="header"><span class="title">BHS Eletrônica</span><button id="close" aria-label="Fechar">&times;</button></div>
   <div id="msgs"></div>
   <div id="options"></div>
   <div id="input"><input id="text" type="text" placeholder="Digite sua mensagem..." autocomplete="off"><button id="send">Enviar</button></div>
 </div>
+
 <script>
 const btn=document.getElementById('chat-btn'), chat=document.getElementById('chat'), badge=document.getElementById('badge');
 const closeBtn=document.getElementById('close'), msgs=document.getElementById('msgs'), options=document.getElementById('options');
-const text=document.getElementById('text'), send=document.getElementById('send'); const sessionId=Math.random().toString(36).slice(2,10);
-function addMsg(content,who='bot'){const d=document.createElement('div');d.className='msg '+who;d.innerHTML=content;msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;}
-function setInitialMenu(deps){options.innerHTML='';deps.forEach(d=>{const b=document.createElement('button');b.className='opt';b.innerHTML=`${d.emoji} <b>${d.name}</b><br><span class="small">${d.type==='ai'?'Chat com IA':'WhatsApp'}</span>`;b.onclick=()=>{ if(d.type==='ai'){addMsg('Você está falando com a IA 🤖.');} else if(d.phone){window.open('https://wa.me/'+d.phone,'_blank');}}; options.appendChild(b);});}
-async function loadMenu(){const r=await fetch('/api/departments'); const deps=await r.json(); setInitialMenu(deps); addMsg('Olá! 👋 Escolha uma opção abaixo ou mande sua pergunta para a IA.');}
-btn.addEventListener('click',()=>{const show=chat.style.display!=='flex'; chat.style.display=show?'flex':'none'; if(show){badge.style.display='none'; if(!options.children.length) loadMenu();}});
+const text=document.getElementById('text'), send=document.getElementById('send'); 
+const sessionId=Math.random().toString(36).slice(2,10);
+
+// ---------- Funções principais ----------
+function addMsg(content,who='bot'){
+  const d=document.createElement('div');
+  d.className='msg '+who;
+  d.innerHTML=content;
+  msgs.appendChild(d);
+  msgs.scrollTop=msgs.scrollHeight;
+}
+
+// ---------- Registro de estatísticas ----------
+async function registrarClique(label){
+  try{
+    await fetch('/api/stats/add',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'button',label})
+    });
+  }catch(e){console.warn('Falha ao registrar clique:',e);}
+}
+
+// ---------- Carregar menu de departamentos ----------
+function setInitialMenu(deps){
+  options.innerHTML='';
+  deps.forEach(d=>{
+    const b=document.createElement('button');
+    b.className='opt';
+    b.innerHTML=`${d.emoji} <b>${d.name}</b><br><span class="small">${d.type==='ai'?'Chat com IA':'WhatsApp'}</span>`;
+    b.onclick=()=>{
+      registrarClique(d.name); // <-- registra clique aqui
+      if(d.type==='ai'){
+        addMsg('Você está falando com a IA 🤖.','bot');
+      }else if(d.phone){
+        window.open('https://wa.me/'+d.phone,'_blank');
+      }
+    };
+    options.appendChild(b);
+  });
+}
+
+async function loadMenu(){
+  const r=await fetch('/api/departments');
+  const deps=await r.json();
+  setInitialMenu(deps);
+  addMsg('Olá! 👋 Escolha uma opção abaixo ou mande sua pergunta para a IA.');
+}
+
+// ---------- Ações do chat ----------
+btn.addEventListener('click',()=>{
+  const show=chat.style.display!=='flex';
+  chat.style.display=show?'flex':'none';
+  if(show){
+    badge.style.display='none';
+    if(!options.children.length) loadMenu();
+  }
+});
+
 closeBtn.addEventListener('click',()=>chat.style.display='none');
-async function sendToAI(message){const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message,sessionId})}); const data=await r.json(); return data.message;}
-send.addEventListener('click',async()=>{const m=text.value.trim(); if(!m) return; addMsg(m,'user'); text.value=''; const reply=await sendToAI(m); addMsg(reply,'bot');});
+
+async function sendToAI(message){
+  const r=await fetch('/api/chat',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({message,sessionId})
+  });
+  const data=await r.json();
+  return data.message;
+}
+
+send.addEventListener('click',async()=>{
+  const m=text.value.trim();
+  if(!m) return;
+  addMsg(m,'user');
+  text.value='';
+  const reply=await sendToAI(m);
+  addMsg(reply,'bot');
+});
+
 text.addEventListener('keypress',e=>{if(e.key==='Enter') send.click();});
 </script>
-</body></html>
+</body>
+</html>

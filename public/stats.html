@@ -1,65 +1,55 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>📈 Estatísticas - BHS</title>
-  <style>
-    body{font-family:Segoe UI,Arial;background:#f5f5f5;margin:0;padding:20px}
-    .wrap{max-width:960px;margin:auto;background:#fff;border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.08);padding:20px}
-    h1{margin:0 0 10px}
-    table{width:100%;border-collapse:collapse;margin:10px 0 20px}
-    th,td{padding:10px;border-bottom:1px solid #eee;text-align:left}
-    .actions{display:flex;gap:10px;margin:10px 0}
-    .btn{background:#075E54;color:#fff;border:none;border-radius:8px;padding:10px 14px;cursor:pointer}
-    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
-    .card{background:#fafafa;border:1px solid #eee;border-radius:12px;padding:16px}
-    .muted{color:#666}
-  </style>
+<meta charset="utf-8">
+<title>📊 Estatísticas - BHS</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body{font-family:Segoe UI,Arial,sans-serif;background:#f5f5f5;margin:0;padding:20px}
+.container{max-width:960px;margin:auto;background:#fff;border-radius:14px;padding:24px;box-shadow:0 6px 20px rgba(0,0,0,.08)}
+h1{margin-top:0}
+canvas{margin-top:20px;max-height:400px}
+.btn{appearance:none;border:0;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:500}
+.btn.primary{background:#25D366;color:#fff}
+.btn.ghost{background:#f1f1f1;color:#111}
+.row{display:flex;gap:8px;margin-bottom:20px}
+</style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>📈 Estatísticas</h1>
-    <div class="actions">
-      <button class="btn" onclick="reload()">🔄 Atualizar</button>
-      <a class="btn" href="/api/stats/export">⬇️ Exportar CSV</a>
-      <a class="btn" href="/admin">← Voltar</a>
-    </div>
-
-    <div id="resume" class="muted">Carregando…</div>
-
-    <div class="grid" style="margin-top:16px">
-      <div class="card">
-        <h3>Departamentos (cliques)</h3>
-        <table id="t-deps"><thead><tr><th>Departamento</th><th>Cliques</th></tr></thead><tbody></tbody></table>
-      </div>
-      <div class="card">
-        <h3>Links (cliques)</h3>
-        <table id="t-links"><thead><tr><th>URL</th><th>Cliques</th></tr></thead><tbody></tbody></table>
-      </div>
-    </div>
+<div class="container">
+  <h1>📊 Estatísticas de Cliques</h1>
+  <div class="row">
+    <button class="btn ghost" onclick="loadStats()">🔄 Atualizar</button>
+    <button class="btn primary" onclick="clearStats()">🗑️ Limpar Histórico</button>
   </div>
+  <p id="info"></p>
+  <canvas id="chart"></canvas>
+</div>
 
-  <script>
-    async function reload(){
-      const r = await fetch('/api/stats').then(r=>r.json());
-      document.getElementById('resume').textContent = `Interações totais: ${r.interacoes || 0}`;
+<script>
+async function loadStats(){
+  const r = await fetch('/api/stats');
+  const data = await r.json();
+  const labels = Object.keys(data.summary);
+  const values = Object.values(data.summary);
+  document.getElementById('info').textContent = 
+    `Total de interações: ${data.total} | Último registro: ${data.stats[data.stats.length-1]?.timestamp ?? '---'}`;
 
-      const tbDeps = document.querySelector('#t-deps tbody'); tbDeps.innerHTML = '';
-      Object.entries(r.departamentos || {}).sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>{
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${k}</td><td>${v}</td>`;
-        tbDeps.appendChild(tr);
-      });
+  if(window.chart) chart.destroy();
+  const ctx = document.getElementById('chart').getContext('2d');
+  window.chart = new Chart(ctx,{
+    type:'bar',
+    data:{labels,datasets:[{label:'Cliques',data:values,backgroundColor:'#25D366'}]},
+    options:{scales:{y:{beginAtZero:true}}}
+  });
+}
 
-      const tbLinks = document.querySelector('#t-links tbody'); tbLinks.innerHTML = '';
-      Object.entries(r.links || {}).sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>{
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td><a href="${k}" target="_blank">${k}</a></td><td>${v}</td>`;
-        tbLinks.appendChild(tr);
-      });
-    }
-    reload();
-  </script>
+async function clearStats(){
+  if(!confirm('Apagar todo o histórico?'))return;
+  await fetch('/api/stats',{method:'DELETE'});
+  loadStats();
+}
+loadStats();
+</script>
 </body>
 </html>

@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>📊 Estatísticas - BHS</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 body{font-family:Segoe UI,Arial,sans-serif;background:#f5f5f5;margin:0;padding:20px}
 .container{max-width:960px;margin:auto;background:#fff;border-radius:14px;padding:24px;box-shadow:0 6px 20px rgba(0,0,0,.08)}
@@ -14,17 +15,28 @@ th{background:#f1f1f1}
 .btn.primary{background:#25D366;color:#fff}
 .btn.ghost{background:#f1f1f1;color:#111}
 .row{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+select,input[type="date"]{padding:8px 10px;border:1px solid #ccc;border-radius:8px}
+canvas{margin-top:20px;max-height:320px}
 </style>
 </head>
 <body>
 <div class="container">
   <h1>📊 Estatísticas de Cliques</h1>
   <div class="row">
+    <select id="period">
+      <option value="7">Últimos 7 dias</option>
+      <option value="15">Últimos 15 dias</option>
+      <option value="30">Últimos 30 dias</option>
+      <option value="all">Todo o histórico</option>
+    </select>
     <button class="btn ghost" onclick="loadStats()">🔄 Atualizar</button>
     <button class="btn primary" onclick="exportCSV()">📤 Exportar CSV</button>
-    <button class="btn primary" onclick="clearStats()">🗑️ Limpar Histórico</button>
+    <button class="btn primary" onclick="clearStats()">🗑️ Limpar</button>
   </div>
+
   <p id="info"></p>
+  <canvas id="chart"></canvas>
+
   <table id="tbl">
     <thead><tr><th>Tipo</th><th>Nome / Mensagem</th><th>Quantidade</th></tr></thead>
     <tbody></tbody>
@@ -37,15 +49,45 @@ let lastData = [];
 async function loadStats(){
   const r = await fetch('/api/stats');
   const data = await r.json();
-  lastData = data.grouped || [];
+  const all = data.grouped || [];
+  const days = document.getElementById('period').value;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - (days === 'all' ? 9999 : parseInt(days)));
+
+  // agrupar por label e tipo
+  const filtered = all.filter(row=>{
+    const ts = new Date(row.timestamp || Date.now());
+    return ts >= cutoff;
+  });
+
+  // agrupar manualmente para gráficos
+  const byLabel = {};
+  filtered.forEach(r=>{
+    const key = r.label + ' (' + r.type + ')';
+    byLabel[key] = (byLabel[key]||0) + r.count;
+  });
+
   const tbody = document.querySelector('#tbl tbody');
   tbody.innerHTML='';
-  data.grouped.forEach(row=>{
+  filtered.forEach(row=>{
     const tr=document.createElement('tr');
     tr.innerHTML=`<td>${row.type}</td><td>${row.label}</td><td>${row.count}</td>`;
     tbody.appendChild(tr);
   });
-  document.getElementById('info').textContent=`Total de interações: ${data.total}`;
+
+  const labels = Object.keys(byLabel);
+  const values = Object.values(byLabel);
+
+  if(window.chart) window.chart.destroy();
+  const ctx=document.getElementById('chart').getContext('2d');
+  window.chart=new Chart(ctx,{
+    type:'bar',
+    data:{labels,datasets:[{label:'Quantidade',data:values,backgroundColor:'#25D366'}]},
+    options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}
+  });
+
+  lastData = filtered;
+  document.getElementById('info').textContent=`Total: ${filtered.length} registros (período: ${days==='all'?'completo':days+' dias'})`;
 }
 
 async function clearStats(){

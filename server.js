@@ -1,3 +1,6 @@
+// ============================================
+// BHS Widget - v5 (Railway-ready)
+// ============================================
 import express from "express";
 import cors from "cors";
 import fs from "fs";
@@ -14,26 +17,51 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const GROQ_API_KEY = process.env.GROQ_API_KEY?.trim();
 
+// ---------- middleware ----------
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-console.log("🚀 Iniciando servidor...");
-console.log("🔑 Chave GROQ carregada?", !!GROQ_API_KEY);
-
+// ---------- data files ----------
 const DATA_FILE = path.join(__dirname, "departments.json");
 const KNOWLEDGE_FILE = path.join(__dirname, "knowledge.txt");
+const STATS_FILE = path.join(__dirname, "stats.json");
 
+// bootstrap files
 if (!fs.existsSync(DATA_FILE)) fs.writeFileSync(DATA_FILE, "[]");
 if (!fs.existsSync(KNOWLEDGE_FILE)) fs.writeFileSync(KNOWLEDGE_FILE, "");
+if (!fs.existsSync(STATS_FILE)) fs.writeFileSync(STATS_FILE, JSON.stringify({
+  departamentos: {}, links: {}, interacoes: 0
+}, null, 2));
 
-function readDepartments(){ try{return JSON.parse(fs.readFileSync(DATA_FILE,"utf8"));}catch{return [];} }
-function writeDepartments(v){ fs.writeFileSync(DATA_FILE, JSON.stringify(v,null,2)); }
-function readKnowledge(){ try{return fs.readFileSync(KNOWLEDGE_FILE,"utf8");}catch{return "";} }
+// helpers
+const readDepartments = () => {
+  try { return JSON.parse(fs.readFileSync(DATA_FILE, "utf8")); } catch { return []; }
+};
+const writeDepartments = (arr) => {
+  // grava de forma síncrona e robusta
+  const tmp = DATA_FILE + ".tmp";
+  fs.writeFileSync(tmp, JSON.stringify(arr, null, 2));
+  fs.renameSync(tmp, DATA_FILE);
+};
+const readKnowledge = () => {
+  try { return fs.readFileSync(KNOWLEDGE_FILE, "utf8"); } catch { return ""; }
+};
+const readStats = () => {
+  try { return JSON.parse(fs.readFileSync(STATS_FILE, "utf8")); } catch {
+    return { departamentos: {}, links: {}, interacoes: 0 };
+  }
+};
+const writeStats = (obj) => {
+  const tmp = STATS_FILE + ".tmp";
+  fs.writeFileSync(tmp, JSON.stringify(obj, null, 2));
+  fs.renameSync(tmp, STATS_FILE);
+};
 
-let fallbackActive = false; // se true, usa o modelo menor
+// ---------- IA com resumo curto + fallback 429 ----------
+let fallbackActive = false; // alterna 70b -> 8b se bater limite
 
-async function callGroqModel(model, messages) {
+async function callGroq(model, messages) {
   const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -45,105 +73,226 @@ async function callGroqModel(model, messages) {
       model,
       messages,
       temperature: 0.6,
-      max_tokens: 600
+      max_tokens: 500
     })
   });
   return resp;
 }
 
-async function callAI(userMessage, history=[]) {
+function clipReply(text, limit = 420) {
+  if (!text) return text;
+  const clean = text.replace(/\n{3,}/g, "\n\n").trim();
+  return clean.length > limit ? clean.slice(0, limit).trim() + "…" : clean;
+}
+
+async function callAI(userMessage, history = []) {
   try {
     if (!GROQ_API_KEY) {
-      console.error("❌ GROQ_API_KEY ausente!");
-      return "Servidor da IA não configurado. Contate o administrador.";
+      return "Servidor da IA não configurado. Digite /atendente para falar com humano.";
     }
 
+    // instrução pra respostas curtas
+    const sys = `${readKnowledge()}
+
+Regras de estilo:
+- Responda em PT-BR.
+- Seja objetivo e claro.
+- Máximo 2-3 frases. Liste itens com bullets quando fizer sentido.
+- Se for preço/estoque/logística sensível, convide a falar com atendente.`;
+
     const messages = [
-      { role:"system", content: readKnowledge() || "Você é a assistente Bela da BHS Eletrônica. Responda em português claro e profissional." },
+      { role: "system", content: sys },
       ...history,
-      { role:"user", content: userMessage }
+      { role: "user", content: userMessage }
     ];
 
     const model = fallbackActive ? "llama-3.1-8b-instant" : "llama-3.3-70b-versatile";
-    console.log(`🤖 Chamando modelo: ${model} (fallback: ${fallbackActive})`);
+    const resp = await callGroq(model, messages);
 
-    const resp = await callGroqModel(model, messages);
-    console.log("📡 Status da Groq:", resp.status);
-
-    // Se limite atingido -> fallback automático
     if (resp.status === 429) {
-      console.warn("⚠️ Limite atingido — ativando fallback para modelo 8b-instant.");
+      // ativa fallback para 8b e tenta novamente
       fallbackActive = true;
-
-      const resp2 = await callGroqModel("llama-3.1-8b-instant", messages);
-      console.log("📡 Status fallback:", resp2.status);
-
+      const resp2 = await callGroq("llama-3.1-8b-instant", messages);
       if (!resp2.ok) {
-        const text = await resp2.text();
-        console.error("❌ Falha no fallback:", resp2.status, text);
-        return "A IA atingiu o limite de uso no momento. Tente novamente mais tarde.";
+        const t2 = await resp2.text();
+        console.error("Falha fallback 8b:", resp2.status, t2);
+        return "A IA atingiu limite de uso no momento. Tente novamente em alguns minutos ou digite /atendente.";
       }
-
       const data2 = await resp2.json();
-      return data2?.choices?.[0]?.message?.content || "Não consegui responder agora.";
+      return clipReply(data2?.choices?.[0]?.message?.content || "");
     }
 
-    // Se erro genérico
     if (!resp.ok) {
-      const text = await resp.text();
-      console.error("❌ Erro Groq:", resp.status, text);
-      return `Erro do servidor da IA (${resp.status}).`;
+      const t = await resp.text();
+      console.error("Erro Groq:", resp.status, t);
+      return "Ops! O servidor da IA está temporariamente fora do ar. Tente mais tarde ou digite /atendente.";
     }
 
-    // Resposta normal
     const data = await resp.json();
-    const reply = data?.choices?.[0]?.message?.content || "Não consegui gerar uma resposta.";
-    console.log("✅ Resposta IA:", reply.slice(0, 80));
-
-    // Se funcionou com o modelo grande, desativa fallback
-    if (fallbackActive) {
-      console.log("✅ Voltando ao modelo 70b.");
-      fallbackActive = false;
-    }
-
+    const reply = clipReply(data?.choices?.[0]?.message?.content || "");
+    // se funcionou com 70b, desativa fallback
+    if (!fallbackActive) return reply;
+    // funcionou com o atual; se era fallback ativo, testaremos 70b na próxima
+    fallbackActive = false;
     return reply;
 
   } catch (e) {
-    console.error("💣 Falha geral na chamada Groq:", e.message);
-    return "Ops! O servidor da IA está temporariamente fora do ar. Tente novamente em instantes.";
+    console.error("Falha geral IA:", e?.message || e);
+    return "Ops! O servidor da IA está temporariamente fora do ar. Tente novamente mais tarde.";
   }
 }
 
+// ---------- memória simples de conversa ----------
 const conversations = new Map();
 
-// Endpoint do chat
-app.post("/api/chat", async (req,res)=>{
-  try{
-    const { message, sessionId } = req.body;
-    if(!message) return res.status(400).json({error:"Mensagem obrigatória"});
-    const sid = sessionId || "anon";
-    const session = conversations.get(sid) || { history: [] };
+// ---------- API: departamentos ----------
+app.get("/api/departments", (req, res) => res.json(readDepartments()));
 
-    if(message.toLowerCase().includes("/limpar")){ 
-      conversations.delete(sid); 
-      return res.json({message:"Conversa limpa!"}); 
-    }
+app.post("/api/departments", (req, res) => {
+  const { name, phone, emoji, type } = req.body;
+  if (!name) return res.status(400).json({ error: "Nome obrigatório" });
+  const deps = readDepartments();
+  const item = {
+    id: deps.length ? Math.max(...deps.map(d => d.id)) + 1 : 1,
+    name,
+    phone: type === "whatsapp" ? (phone || null) : null,
+    emoji: emoji || "📞",
+    type: type || "whatsapp"
+  };
+  deps.push(item);
+  writeDepartments(deps);
+  res.status(201).json(item);
+});
 
-    if(message.toLowerCase().includes("/atendente")){
-      return res.json({ message:"Escolha um departamento: Vendas, Suporte ou Financeiro.", showDepartments:true });
-    }
+app.put("/api/departments/:id", (req, res) => {
+  const id = parseInt(req.params.id);
+  const deps = readDepartments();
+  const i = deps.findIndex(d => d.id === id);
+  if (i === -1) return res.status(404).json({ error: "Não encontrado" });
+  deps[i] = { ...deps[i], ...req.body };
+  writeDepartments(deps);
+  res.json(deps[i]);
+});
 
-    const reply = await callAI(message, session.history);
-    session.history.push({role:"user", content:message}, {role:"assistant", content:reply});
-    conversations.set(sid, session);
-    res.json({ message: reply, showDepartments:false });
-  }catch(e){
-    console.error("❌ Erro no /api/chat:", e);
-    res.status(500).json({error:"Falha ao processar"});
+app.delete("/api/departments/:id", (req, res) => {
+  const id = parseInt(req.params.id);
+  const deps = readDepartments();
+  const i = deps.findIndex(d => d.id === id);
+  if (i === -1) return res.status(404).json({ error: "Não encontrado" });
+  const removed = deps.splice(i, 1)[0];
+  writeDepartments(deps);
+  res.json({ ok: true, removed });
+});
+
+app.put("/api/departments/order", (req, res) => {
+  const { order } = req.body; // [ids em nova ordem]
+  if (!Array.isArray(order)) return res.status(400).json({ error: "Formato inválido" });
+  const deps = readDepartments();
+  const pos = new Map(order.map((id, ix) => [id, ix]));
+  deps.sort((a, b) => (pos.get(a.id) ?? 0) - (pos.get(b.id) ?? 0));
+  writeDepartments(deps);
+  console.log("✅ Ordem salva:", order);
+  res.json({ ok: true });
+});
+
+// ---------- API: conhecimento ----------
+app.get("/api/knowledge", (req, res) => res.send(readKnowledge()));
+app.post("/api/knowledge", (req, res) => {
+  try {
+    const { content } = req.body;
+    fs.writeFileSync(KNOWLEDGE_FILE, content ?? "", "utf8");
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
   }
 });
 
-// Root simples
-app.get("/", (req,res)=> res.sendFile(path.join(__dirname, "public", "index.html")));
+// ---------- API: estatísticas ----------
+app.post("/api/track/department", (req, res) => {
+  const { name } = req.body;
+  const stats = readStats();
+  stats.interacoes++;
+  stats.departamentos[name] = (stats.departamentos[name] || 0) + 1;
+  writeStats(stats);
+  res.json({ ok: true });
+});
 
-app.listen(PORT, ()=> console.log(`🚀 Widget rodando na porta ${PORT}`));
+app.post("/api/track/link", (req, res) => {
+  const { url } = req.body;
+  const stats = readStats();
+  stats.interacoes++;
+  stats.links[url] = (stats.links[url] || 0) + 1;
+  writeStats(stats);
+  res.json({ ok: true });
+});
+
+app.get("/api/stats", (req, res) => res.json(readStats()));
+app.get("/api/stats/export", (req, res) => {
+  const s = readStats();
+  const lines = [
+    "Tipo,Chave,Quantidade",
+    ...Object.entries(s.departamentos).map(([k, v]) => `Departamento,${k},${v}`),
+    ...Object.entries(s.links).map(([k, v]) => `Link,${k},${v}`)
+  ];
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", "attachment; filename=stats-export.csv");
+  res.send(lines.join("\n"));
+});
+
+// ---------- API: chat ----------
+app.post("/api/chat", async (req, res) => {
+  try {
+    const { message, sessionId } = req.body;
+    if (!message) return res.status(400).json({ error: "Mensagem obrigatória" });
+
+    const sid = sessionId || "anon";
+    const session = conversations.get(sid) || { history: [], startedAt: Date.now() };
+
+    if (message.toLowerCase().includes("/limpar")) {
+      conversations.delete(sid);
+      return res.json({ message: "Conversa limpa!" });
+    }
+    if (message.toLowerCase().includes("/menu") || message.toLowerCase().includes("/atendente")) {
+      return res.json({
+        message: "Escolha um departamento: Vendas, Suporte ou Financeiro.",
+        showDepartments: true
+      });
+    }
+
+    const reply = await callAI(message, session.history);
+    session.history.push({ role: "user", content: message }, { role: "assistant", content: reply });
+    conversations.set(sid, session);
+    res.json({ message: reply, showDepartments: false });
+  } catch (e) {
+    console.error("Erro /api/chat:", e);
+    res.status(500).json({ error: "Falha ao processar" });
+  }
+});
+
+// ---------- páginas ----------
+app.get("/admin", (req, res) => {
+  res.send(`<!doctype html><html lang="pt-BR"><head>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Admin - BHS</title>
+  <style>
+    body{font-family:Segoe UI,Arial;background:#f5f5f5;margin:0;padding:20px}
+    .wrap{max-width:960px;margin:auto}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}
+    .card{background:#fff;border-radius:14px;padding:24px;box-shadow:0 6px 24px rgba(0,0,0,.08);text-decoration:none;color:#111;display:block}
+    .card:hover{transform:translateY(-3px);box-shadow:0 10px 30px rgba(0,0,0,.12)}h1{margin-top:0}
+  </style></head>
+  <body><div class="wrap"><h1>🛠️ Administração</h1>
+  <div class="grid">
+    <a class="card" href="/departments.html">📱 Departamentos</a>
+    <a class="card" href="/train.html">🤖 Treinar IA</a>
+    <a class="card" href="/stats.html">📈 Estatísticas</a>
+  </div></div></body></html>`);
+});
+
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+app.listen(PORT, () => {
+  console.log(`🚀 BHS Widget v5 rodando na porta ${PORT}`);
+});

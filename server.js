@@ -136,19 +136,29 @@ app.post("/api/stats/add", (req, res) => {
   res.json({ ok: true });
 });
 
+// =============== Estatísticas detalhadas ===============
 app.get("/api/stats", (req, res) => {
   const stats = readJSON(STATS_FILE);
-  const summary = {};
-  for (const s of stats) {
-    const key = `${s.type}::${s.label || "N/A"}`;
-    summary[key] = (summary[key] || 0) + 1;
+
+  // Garante que todos os registros tenham timestamp
+  const normalized = stats.map(s => ({
+    type: s.type || "outro",
+    label: s.label || "N/A",
+    timestamp: s.timestamp || new Date().toISOString()
+  }));
+
+  // Agrupar por tipo + label
+  const summaryMap = {};
+  for (const s of normalized) {
+    const key = `${s.type}::${s.label}`;
+    if (!summaryMap[key]) summaryMap[key] = { type: s.type, label: s.label, count: 0, timestamp: s.timestamp };
+    summaryMap[key].count++;
   }
-  const grouped = Object.entries(summary).map(([key, count]) => {
-    const [type, label] = key.split("::");
-    return { type, label, count };
-  });
-  res.json({ total: stats.length, grouped });
+
+  const grouped = Object.values(summaryMap);
+  res.json({ total: normalized.length, grouped });
 });
+
 
 app.delete("/api/stats", (req, res) => {
   writeJSON(STATS_FILE, []);

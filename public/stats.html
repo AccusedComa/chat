@@ -41,6 +41,8 @@ canvas{margin-top:20px;max-height:320px}
     <thead><tr><th>Tipo</th><th>Nome / Mensagem</th><th>Quantidade</th></tr></thead>
     <tbody></tbody>
   </table>
+
+  <canvas id="pieChart"></canvas>
 </div>
 
 <script>
@@ -50,23 +52,18 @@ async function loadStats(){
   const r = await fetch('/api/stats');
   const data = await r.json();
   const all = data.grouped || [];
+
   const days = document.getElementById('period').value;
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - (days === 'all' ? 9999 : parseInt(days)));
 
-  // agrupar por label e tipo
-  const filtered = all.filter(row=>{
-    const ts = new Date(row.timestamp || Date.now());
+  // Filtrar por período
+  const filtered = all.filter(r=>{
+    const ts = new Date(r.timestamp || Date.now());
     return ts >= cutoff;
   });
 
-  // agrupar manualmente para gráficos
-  const byLabel = {};
-  filtered.forEach(r=>{
-    const key = r.label + ' (' + r.type + ')';
-    byLabel[key] = (byLabel[key]||0) + r.count;
-  });
-
+  // Atualizar tabela
   const tbody = document.querySelector('#tbl tbody');
   tbody.innerHTML='';
   filtered.forEach(row=>{
@@ -75,19 +72,33 @@ async function loadStats(){
     tbody.appendChild(tr);
   });
 
-  const labels = Object.keys(byLabel);
-  const values = Object.values(byLabel);
+  // Dados pro gráfico
+  const labels = filtered.map(r=>`${r.label} (${r.type})`);
+  const values = filtered.map(r=>r.count);
 
-  if(window.chart) window.chart.destroy();
+  if(window.barChart) window.barChart.destroy();
   const ctx=document.getElementById('chart').getContext('2d');
-  window.chart=new Chart(ctx,{
+  window.barChart=new Chart(ctx,{
     type:'bar',
-    data:{labels,datasets:[{label:'Quantidade',data:values,backgroundColor:'#25D366'}]},
+    data:{labels,datasets:[{label:'Interações',data:values,backgroundColor:'#25D366'}]},
     options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}
   });
 
+  // Pie Chart - Top 5
+  const top5 = filtered.slice(0,5);
+  if(window.pieChart) window.pieChart.destroy();
+  const pieCtx=document.getElementById('pieChart').getContext('2d');
+  window.pieChart=new Chart(pieCtx,{
+    type:'pie',
+    data:{
+      labels:top5.map(r=>r.label),
+      datasets:[{data:top5.map(r=>r.count),backgroundColor:['#25D366','#128C7E','#075E54','#34B7F1','#DCF8C6']}]
+    },
+    options:{plugins:{title:{display:true,text:'Top 5 mais clicados'}}}
+  });
+
+  document.getElementById('info').textContent=`Total: ${filtered.length} registros (${days==='all'?'todo o histórico':`últimos ${days} dias`})`;
   lastData = filtered;
-  document.getElementById('info').textContent=`Total: ${filtered.length} registros (período: ${days==='all'?'completo':days+' dias'})`;
 }
 
 async function clearStats(){
@@ -98,9 +109,9 @@ async function clearStats(){
 
 function exportCSV(){
   if(!lastData.length){alert('Nenhum dado para exportar.');return;}
-  let csv='Tipo,Nome/Mensagem,Quantidade\n';
+  let csv='Tipo,Nome/Mensagem,Quantidade,Data\n';
   lastData.forEach(r=>{
-    const line=`"${r.type}","${r.label.replace(/"/g,'""')}","${r.count}"`;
+    const line=`"${r.type}","${r.label.replace(/"/g,'""')}","${r.count}","${r.timestamp}"`;
     csv+=line+'\n';
   });
   const blob=new Blob([csv],{type:'text/csv'});

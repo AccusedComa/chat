@@ -12,12 +12,12 @@
   .topbar{display:flex;align-items:center;gap:12px;margin-bottom:12px}
   .back{appearance:none;border:0;background:#eee;color:#111;border-radius:10px;padding:8px 12px;cursor:pointer}
   h1{margin:6px 0 16px}
-  textarea{width:100%;height:520px;padding:12px;border:1px solid #ddd;border-radius:12px;font-family:Consolas,monospace}
-  .row{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
-  .btn{appearance:none;border:0;border-radius:10px;padding:10px 14px;cursor:pointer}
+  textarea{width:100%;min-height:400px;padding:12px;border:1px solid #ddd;border-radius:10px;font-family:Consolas,monospace;font-size:14px;resize:vertical}
+  .actions{display:flex;gap:10px;margin-top:12px}
+  .btn{appearance:none;border:0;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:500}
   .btn.primary{background:var(--green);color:#fff}
   .btn.ghost{background:#f1f1f1;color:#111}
-  .small{color:#666;font-size:13px}
+  #msg{margin-top:12px;font-size:14px;color:#0b8043;font-weight:500}
 </style>
 </head>
 <body>
@@ -26,49 +26,54 @@
       <button class="back" onclick="location.href='/admin'">⬅️ Voltar</button>
       <h1>🤖 Treinar IA</h1>
     </div>
+    <p style="color:#555">Edite abaixo as informações que a assistente Bela deve usar como base de conhecimento.<br>
+    Exemplo: produtos, políticas de troca, horário de atendimento, contatos, etc.</p>
 
-    <p class="small">Este painel lê e salva o conteúdo em <b>knowledge.txt</b> (na raiz do projeto). O texto é enviado como <i>system prompt</i> para a IA Groq.</p>
+    <textarea id="content" placeholder="Digite aqui o conteúdo do treinamento..."></textarea>
 
-    <textarea id="txt" placeholder="Cole aqui o conhecimento base da assistente (produtos, políticas, horários, telefones, instruções de estilo, etc.)"></textarea>
-
-    <div class="row">
-      <button class="btn ghost" id="load">Carregar</button>
-      <button class="btn primary" id="save">Salvar</button>
-      <button class="btn ghost" id="test">Testar pergunta</button>
+    <div class="actions">
+      <button class="btn ghost" id="reload">Recarregar</button>
+      <button class="btn primary" id="save">Salvar treinamento</button>
     </div>
+    <div id="msg"></div>
   </div>
 
 <script>
-const txt=document.getElementById('txt');
+const contentEl=document.getElementById('content');
+const msgEl=document.getElementById('msg');
 
-document.getElementById('load').onclick=async()=>{
-  const r=await fetch('/api/knowledge');
-  txt.value=await r.text();
-};
+function showMsg(txt,ok=true){
+  msgEl.style.color=ok?"#0b8043":"#c62828";
+  msgEl.textContent=txt;
+  setTimeout(()=>msgEl.textContent="",3000);
+}
 
-document.getElementById('save').onclick=async()=>{
-  await fetch('/api/knowledge',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({content: txt.value})
-  });
-  alert('Conhecimento salvo em knowledge.txt ✅');
-};
+async function load(){
+  try{
+    const txt=await fetch('/api/knowledge').then(r=>r.text());
+    contentEl.value=txt||"";
+    showMsg("Conteúdo carregado!");
+  }catch(e){
+    showMsg("Erro ao carregar conhecimento.",false);
+  }
+}
 
-document.getElementById('test').onclick=async()=>{
-  const q=prompt('Pergunte algo para a IA (teste rápido):');
-  if(!q) return;
-  const r=await fetch('/api/chat',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ message:q, sessionId:'test-admin' })
-  });
-  const data=await r.json();
-  alert('Resposta da IA:\n\n'+(data.message||'(sem resposta)'));
-};
+async function save(){
+  try{
+    await fetch('/api/knowledge',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({content:contentEl.value})
+    });
+    showMsg("✅ Treinamento salvo com sucesso!");
+  }catch(e){
+    showMsg("Erro ao salvar.",false);
+  }
+}
 
-// auto-carrega ao abrir
-document.getElementById('load').click();
+document.getElementById('reload').onclick=load;
+document.getElementById('save').onclick=save;
+load();
 </script>
 </body>
 </html>

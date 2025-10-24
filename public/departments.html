@@ -65,16 +65,16 @@ const emojiEl=document.getElementById('emoji');
 const typeEl=document.getElementById('type');
 const msgEl=document.getElementById('msg');
 
+function showMsg(txt,ok=true){
+  msgEl.style.color=ok?"#0b8043":"#c62828";
+  msgEl.textContent=txt;
+  setTimeout(()=>msgEl.textContent="",3000);
+}
+
 async function load(){
   const r=await fetch('/api/departments');
   data=await r.json();
   render();
-}
-
-function showMsg(txt,ok=true){
-  msgEl.style.color = ok ? "#0b8043" : "#c62828";
-  msgEl.textContent = txt;
-  setTimeout(()=> msgEl.textContent = "", 3000);
 }
 
 function render(){
@@ -89,15 +89,13 @@ function render(){
       <span class="controls">
         <button class="btn ghost" onclick="editItem(${d.id})">Editar</button>
         <button class="btn ghost" onclick="delItem(${d.id})">Excluir</button>
-      </span>
-    `;
+      </span>`;
     li.addEventListener('dragstart',()=>li.classList.add('drag'));
     li.addEventListener('dragend',()=>li.classList.remove('drag'));
     list.appendChild(li);
   });
 }
 
-// ---------- Drag & Drop ----------
 list.addEventListener('dragover',e=>{
   e.preventDefault();
   const dragging=document.querySelector('.item.drag');
@@ -107,62 +105,44 @@ list.addEventListener('dragover',e=>{
   list.insertBefore(dragging,next||null);
 });
 
-// ---------- Salvar ordem ----------
 document.getElementById('saveOrder').onclick=async()=>{
-  const order=[...list.children].map(li=>parseInt(li.dataset.id));
+  const order=[...list.children].map(li=>Number(li.dataset.id));
   try{
     const r=await fetch('/api/departments/order',{
-      method:'PUT',
+      method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({order})
     });
-    const res=await r.json();
-    if(res.ok){ showMsg('✅ Ordem salva com sucesso!'); await load(); }
-    else showMsg('Erro ao salvar ordem.',false);
-  }catch(e){ showMsg('Falha de conexão ao salvar.',false); }
+    const res=await r.json().catch(()=>({}));
+    if(r.ok && res.ok){ showMsg('✅ Ordem salva com sucesso!'); await load(); }
+    else showMsg('Erro ao salvar ordem: '+(res?.error||`HTTP ${r.status}`),false);
+  }catch(e){ showMsg('Falha de conexão ao salvar.',false); console.error(e); }
 };
 
-// ---------- Adicionar ----------
 document.getElementById('add').onclick=async()=>{
-  const payload={
-    name: nameEl.value.trim(),
-    phone: phoneEl.value.trim(),
-    emoji: emojiEl.value.trim() || '📞',
-    type: typeEl.value
-  };
+  const payload={name:nameEl.value.trim(),phone:phoneEl.value.trim(),emoji:emojiEl.value.trim()||'📞',type:typeEl.value};
   if(!payload.name){ showMsg('Nome é obrigatório',false); return; }
-  await fetch('/api/departments',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(payload)
-  });
+  await fetch('/api/departments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   nameEl.value=''; phoneEl.value=''; emojiEl.value='📞'; typeEl.value='whatsapp';
   showMsg('Novo departamento adicionado!');
   await load();
 };
 
-// ---------- Editar / Excluir ----------
 window.editItem=async(id)=>{
   const d=data.find(x=>x.id===id);
   if(!d) return;
-  const name=prompt('Nome:', d.name) ?? d.name;
-  const phone=prompt('Telefone:', d.phone ?? '') ?? d.phone;
-  const emoji=prompt('Emoji:', d.emoji) ?? d.emoji;
-  const type=prompt('Tipo (whatsapp/ai):', d.type) ?? d.type;
-  await fetch('/api/departments/'+id,{
-    method:'PUT',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({name,phone,emoji,type})
-  });
-  showMsg('Departamento atualizado!');
-  await load();
+  const name=prompt('Nome:',d.name)??d.name;
+  const phone=prompt('Telefone:',d.phone??'')??d.phone;
+  const emoji=prompt('Emoji:',d.emoji)??d.emoji;
+  const type=prompt('Tipo (whatsapp/ai):',d.type)??d.type;
+  await fetch('/api/departments/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,phone,emoji,type})});
+  showMsg('Departamento atualizado!'); await load();
 };
 
 window.delItem=async(id)=>{
   if(!confirm('Excluir este departamento?')) return;
-  await fetch('/api/departments/'+id,{ method:'DELETE' });
-  showMsg('Departamento removido!');
-  await load();
+  await fetch('/api/departments/'+id,{method:'DELETE'});
+  showMsg('Departamento removido!'); await load();
 };
 
 document.getElementById('reload').onclick=load;

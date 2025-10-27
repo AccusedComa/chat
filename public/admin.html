@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Admin - BHS</title>
+<style>
+  :root{--green:#25D366;--blue:#1976D2}
+  *{box-sizing:border-box} body{font-family:Segoe UI,Arial,sans-serif;background:#f5f5f5;margin:0;padding:24px}
+  .wrap{max-width:980px;margin:auto}
+  .card{background:#fff;border-radius:14px;padding:24px;box-shadow:0 6px 24px rgba(0,0,0,.08);margin-bottom:16px}
+  h1{margin:0 0 8px} .subtitle{color:#666;margin:0 0 16px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+  .tile{background:linear-gradient(135deg,var(--green),#128C7E);color:#fff;border-radius:12px;padding:20px;text-decoration:none;display:block}
+  .tile.blue{background:linear-gradient(135deg,#2196F3,var(--blue))}
+  .tile.orange{background:linear-gradient(135deg,#FF9800,#F57C00)}
+  .tile h3{margin:0 0 6px} .tile p{margin:0;opacity:.9}
+  .status{display:flex;gap:10px;align-items:center}
+  .badge{display:inline-block;background:#E8F5E9;color:#1b5e20;border:1px solid #ccefd8;border-radius:999px;padding:4px 10px;font-size:12px}
+  code{background:#f1f1f1;padding:2px 6px;border-radius:6px}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>🛠️ Painel de Administração</h1>
+      <p class="subtitle">Gerencie o widget, IA e conteúdo.</p>
+      <div class="status">
+        <strong>🧠 Modelo atual:</strong> <span id="model" class="badge">carregando...</span>
+        <span style="color:#666">| API base:</span> <code id="apiBase"></code>
+      </div>
+    </div>
+
+    <div class="grid">
+      <a class="tile" href="/departments.html">
+        <h3>📱 Departamentos</h3><p>Gerenciar números e ordem dos botões</p>
+      </a>
+      <a class="tile blue" href="/train.html">
+        <h3>🤖 Treinar IA</h3><p>Editar o <code>knowledge.txt</code></p>
+      </a>
+      <a class="tile orange" href="/stats.html">
+        <h3>📊 Estatísticas</h3><p>Cliques e interações</p>
+      </a>
+    </div>
+  </div>
+
+<script>
+(async ()=>{
+  document.getElementById('apiBase').textContent = location.host;
+  try{
+    const r = await fetch('/api/model');
+    const d = await r.json();
+    document.getElementById('model').textContent = d.model || 'Nenhum';
+  }catch(e){
+    document.getElementById('model').textContent = 'Nenhum';
+  }
+})();
+</script>
+</body>
+</html>

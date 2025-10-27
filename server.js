@@ -1,7 +1,8 @@
 // ============================================
-// WIDGET BACKEND - BHS v5.3
-// Correções: IA treinável + stats detalhado
+// WIDGET BACKEND - BHS ELETRÔNICA (v4.1)
+// Multi-LLM fallback: Groq → Gemini → HuggingFace
 // ============================================
+
 import express from "express";
 import cors from "cors";
 import fs from "fs";
@@ -16,182 +17,316 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
+// 🔑 Env keys
+const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
+const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY || process.env.HF_API_KEY || "";
+
+// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
+// Files
 const DATA_FILE = path.join(__dirname, "departments.json");
 const KNOWLEDGE_FILE = path.join(__dirname, "knowledge.txt");
 const STATS_FILE = path.join(__dirname, "stats.json");
 
 if (!fs.existsSync(DATA_FILE)) fs.writeFileSync(DATA_FILE, "[]");
 if (!fs.existsSync(KNOWLEDGE_FILE)) fs.writeFileSync(KNOWLEDGE_FILE, "");
-if (!fs.existsSync(STATS_FILE)) fs.writeFileSync(STATS_FILE, "[]");
+if (!fs.existsSync(STATS_FILE)) fs.writeFileSync(STATS_FILE, "{}");
 
-// =============== Leitura / Escrita ===============
-function readJSON(file) {
-  try { return JSON.parse(fs.readFileSync(file, "utf8")); }
-  catch { return []; }
+// Helpers to read/write
+function readDepartments() {
+  try { return JSON.parse(fs.readFileSync(DATA_FILE, "utf8")); } catch { return []; }
 }
-function writeJSON(file, data) {
-  fs.writeFileSync(file, JSON.stringify(data, null, 2));
+function writeDepartments(v) {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(v, null, 2));
+}
+function readKnowledge() {
+  try { return fs.readFileSync(KNOWLEDGE_FILE, "utf8"); } catch { return ""; }
+}
+function readStats() {
+  try { return JSON.parse(fs.readFileSync(STATS_FILE, "utf8")); } catch { return {}; }
+}
+function writeStats(v) {
+  fs.writeFileSync(STATS_FILE, JSON.stringify(v, null, 2));
 }
 
-// =============== Cache de conhecimento ===============
-let currentKnowledge = fs.existsSync(KNOWLEDGE_FILE)
-  ? fs.readFileSync(KNOWLEDGE_FILE, "utf8")
-  : "";
-
-// =============== Função de IA ===============
-async function callAI(userMessage, history = []) {
+// ===============================
+// 🔍 Model status
+// ===============================
+let lastUsedModel = "Nenhum"; // atualizado a cada resposta bem-sucedida
+app.get("/api/model", (req, res) => {
+  res.json({ model: lastUsedModel || "Nenhum" });
+});
+app.get("/admin", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "admin.html"));
+});
+// ===============================
+// ⏱️ Fetch com timeout
+// ===============================
+async function fetchWithTimeout(url, opts = {}, timeoutMs = 20000) {
+  const controller = new AbortController();
+  const to = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const messages = [
-      { role: "system", content: currentKnowledge || "Você é a assistente Bela da BHS Eletrônica. Responda de forma resumida, simpática e clara." },
-      ...history,
-      { role: "user", content: userMessage }
-    ];
-    const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_API_KEY}` },
-      body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages, temperature: 0.6, max_tokens: 300 })
-    });
-    if (!resp.ok) throw new Error("Groq " + resp.status);
-    const data = await resp.json();
-    return data?.choices?.[0]?.message?.content ?? "Não consegui responder agora.";
-  } catch (err) {
-    console.error("Erro Groq:", err);
-    return "Ops! O servidor da IA está temporariamente fora do ar. Tente novamente em instantes.";
+    const r = await fetch(url, { ...opts, signal: controller.signal });
+    return r;
+  } finally {
+    clearTimeout(to);
   }
 }
 
-// =============== Departamentos ===============
-app.get("/api/departments", (req, res) => res.json(readJSON(DATA_FILE)));
+// ===============================
+// 🤖 Chamadas às IAs (individuais)
+// ===============================
+async function callGroq(messages) {
+  if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY ausente");
+  const r = await fetchWithTimeout("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${GROQ_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile",
+      messages,
+      temperature: 0.6,
+      max_tokens: 600
+    })
+  });
+  if (!r.ok) throw new Error("Groq HTTP " + r.status);
+  const d = await r.json();
+  return d?.choices?.[0]?.message?.content || "";
+}
+
+async function callGemini(messages) {
+  if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY ausente");
+  // Gemini não usa o mesmo formato de mensagens; juntamos system + user em texto
+  const sys = messages.find(m => m.role === "system")?.content || "";
+  const userJoined = messages.filter(m => m.role === "user").map(m => m.content).join("\n");
+  const full = `${sys}\n${userJoined}`.trim();
+
+  const r = await fetchWithTimeout(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contents: [{ parts: [{ text: full }]}] })
+    }
+  );
+  if (!r.ok) throw new Error("Gemini HTTP " + r.status);
+  const d = await r.json();
+  return d?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+}
+
+async function callHuggingFace(messages) {
+  if (!HUGGINGFACE_API_KEY) throw new Error("HUGGINGFACE_API_KEY ausente");
+  // Prompt simples: concatena papéis
+  const prompt = messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join("\n") + "\nASSISTANT:";
+  const r = await fetchWithTimeout(
+    "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2",
+    {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${HUGGINGFACE_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ inputs: prompt })
+    }
+  );
+  if (!r.ok) throw new Error("HuggingFace HTTP " + r.status);
+  const d = await r.json();
+  // Alguns endpoints retornam array com generated_text
+  if (Array.isArray(d) && d[0]?.generated_text) return d[0].generated_text;
+  // Outros retornos podem vir em outro formato; fallback simples:
+  return typeof d === "string" ? d : "Não consegui responder agora.";
+}
+
+// ===============================
+// 🧠 Orquestrador com Fallback
+// ===============================
+async function callAI(userMessage, history = []) {
+  const systemPrompt =
+    readKnowledge() ||
+    "Você é a assistente Bela da BHS Eletrônica. Responda em PT-BR, de forma breve, objetiva e gentil.";
+
+  const messages = [
+    { role: "system", content: systemPrompt },
+    ...history,
+    { role: "user", content: userMessage }
+  ];
+
+  // 1) Groq
+  try {
+    const reply = await callGroq(messages);
+    if (reply) { lastUsedModel = "Groq: llama-3.3-70b-versatile"; return reply; }
+  } catch (e) { console.warn("⚠️ Groq falhou:", e.message); }
+
+  // 2) Gemini
+  try {
+    const reply = await callGemini(messages);
+    if (reply) { lastUsedModel = "Gemini: gemini-1.5-flash"; return reply; }
+  } catch (e) { console.warn("⚠️ Gemini falhou:", e.message); }
+
+  // 3) HuggingFace
+  try {
+    const reply = await callHuggingFace(messages);
+    if (reply) { lastUsedModel = "HuggingFace: Mistral-7B-Instruct-v0.2"; return reply; }
+  } catch (e) { console.warn("⚠️ HuggingFace falhou:", e.message); }
+
+  // 4) Nada
+  lastUsedModel = "Nenhum";
+  return "Ops! Todas as IAs estão temporariamente fora do ar. Tente novamente em alguns instantes.";
+}
+
+// ===============================
+// 💬 Conversas em memória
+// ===============================
+const conversations = new Map();
+
+// ===============================
+// 📦 API: Departments
+// ===============================
+app.get("/api/departments", (req, res) => res.json(readDepartments()));
 
 app.post("/api/departments", (req, res) => {
   const { name, phone, emoji, type } = req.body;
-  if (!name) return res.status(400).json({ error: "Nome é obrigatório" });
-  const deps = readJSON(DATA_FILE);
-  const newDep = {
+  if (!name) return res.status(400).json({ error: "Nome obrigatório" });
+  const deps = readDepartments();
+  const item = {
     id: deps.length ? Math.max(...deps.map(d => d.id)) + 1 : 1,
-    name, phone, emoji, type
+    name,
+    phone: phone || null,
+    emoji: emoji || "📞",
+    type: type || "whatsapp"
   };
-  deps.push(newDep);
-  writeJSON(DATA_FILE, deps);
-  res.status(201).json(newDep);
+  deps.push(item);
+  writeDepartments(deps);
+  res.status(201).json(item);
 });
 
 app.put("/api/departments/:id", (req, res) => {
   const id = parseInt(req.params.id);
-  const deps = readJSON(DATA_FILE);
-  const idx = deps.findIndex(d => d.id === id);
-  if (idx === -1) return res.status(404).json({ error: "Não encontrado" });
-  deps[idx] = { ...deps[idx], ...req.body };
-  writeJSON(DATA_FILE, deps);
-  res.json(deps[idx]);
+  const deps = readDepartments();
+  const i = deps.findIndex(d => d.id === id);
+  if (i === -1) return res.status(404).json({ error: "Departamento não encontrado" });
+  deps[i] = { ...deps[i], ...req.body };
+  writeDepartments(deps);
+  res.json(deps[i]);
 });
 
-app.post("/api/departments/order", (req, res) => {
+app.delete("/api/departments/:id", (req, res) => {
+  const id = parseInt(req.params.id);
+  const deps = readDepartments();
+  const i = deps.findIndex(d => d.id === id);
+  if (i === -1) return res.status(404).json({ error: "Departamento não encontrado" });
+  const removed = deps.splice(i, 1)[0];
+  writeDepartments(deps);
+  res.json({ ok: true, removed });
+});
+
+app.put("/api/departments/order", (req, res) => {
   try {
     const { order } = req.body;
-    const deps = readJSON(DATA_FILE);
-    const orderNums = order.map(Number);
-    const pos = new Map(orderNums.map((id, i) => [id, i]));
+    if (!Array.isArray(order)) return res.status(400).json({ error: "Formato inválido" });
+    const deps = readDepartments();
+    const pos = new Map(order.map((id, ix) => [id, ix]));
     deps.sort((a, b) => (pos.get(a.id) ?? 0) - (pos.get(b.id) ?? 0));
-    writeJSON(DATA_FILE, deps);
+    writeDepartments(deps);
     res.json({ ok: true });
-  } catch {
-    res.status(500).json({ error: "Falha ao salvar ordem" });
-  }
-});
-
-// =============== Chat + IA ===============
-const sessions = new Map();
-
-app.post("/api/chat", async (req, res) => {
-  const { message, sessionId } = req.body;
-  if (!message) return res.status(400).json({ error: "Mensagem obrigatória" });
-  const sid = sessionId || "anon";
-  const session = sessions.get(sid) || { history: [] };
-  const reply = await callAI(message, session.history);
-  session.history.push({ role: "user", content: message }, { role: "assistant", content: reply });
-  sessions.set(sid, session);
-
-  // salva estatística
-  const stats = readJSON(STATS_FILE);
-  stats.push({ type: "message", label: message, timestamp: new Date().toISOString() });
-  writeJSON(STATS_FILE, stats);
-
-  res.json({ message: reply });
-});
-
-// =============== Estatísticas ===============
-app.post("/api/stats/add", (req, res) => {
-  const { type, label } = req.body;
-  if (!type) return res.status(400).json({ error: "Tipo obrigatório" });
-  const stats = readJSON(STATS_FILE);
-  stats.push({ type, label, timestamp: new Date().toISOString() });
-  writeJSON(STATS_FILE, stats);
-  res.json({ ok: true });
-});
-
-// =============== Estatísticas detalhadas ===============
-app.get("/api/stats", (req, res) => {
-  const stats = readJSON(STATS_FILE);
-
-  // Garante que todos os registros tenham timestamp
-  const normalized = stats.map(s => ({
-    type: s.type || "outro",
-    label: s.label || "N/A",
-    timestamp: s.timestamp || new Date().toISOString()
-  }));
-
-  // Agrupar por tipo + label
-  const summaryMap = {};
-  for (const s of normalized) {
-    const key = `${s.type}::${s.label}`;
-    if (!summaryMap[key]) summaryMap[key] = { type: s.type, label: s.label, count: 0, timestamp: s.timestamp };
-    summaryMap[key].count++;
-  }
-
-  const grouped = Object.values(summaryMap);
-  res.json({ total: normalized.length, grouped });
-});
-
-
-app.delete("/api/stats", (req, res) => {
-  writeJSON(STATS_FILE, []);
-  res.json({ ok: true });
-});
-
-// =============== Treinar IA ===============
-app.get("/api/knowledge", (req, res) => res.send(currentKnowledge));
-app.post("/api/knowledge", (req, res) => {
-  try {
-    const { content } = req.body;
-    fs.writeFileSync(KNOWLEDGE_FILE, content ?? "", "utf8");
-    currentKnowledge = content; // atualiza cache
-    res.json({ ok: true, msg: "IA atualizada com sucesso!" });
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
 });
 
-// =============== Admin ===============
-app.get("/admin", (req, res) => {
-  res.send(`
-  <!doctype html><html><head><meta charset="utf-8"/><title>Admin - BHS</title>
-  <style>body{font-family:Segoe UI,Arial;background:#f5f5f5;margin:0;padding:20px}
-  .wrap{max-width:920px;margin:auto}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}
-  .card{background:#fff;border-radius:14px;padding:24px;box-shadow:0 6px 24px rgba(0,0,0,.08);text-decoration:none;color:#111;display:block}
-  .card:hover{transform:translateY(-3px);box-shadow:0 10px 30px rgba(0,0,0,.12)}h1{margin-top:0}</style></head>
-  <body><div class="wrap"><h1>🛠️ Administração</h1>
-  <div class="grid">
-    <a class="card" href="/departments.html">📱 Departamentos</a>
-    <a class="card" href="/train.html">🤖 Treinar IA</a>
-    <a class="card" href="/stats.html">📊 Estatísticas</a>
-  </div></div></body></html>`);
+// ===============================
+// 🧾 API: Knowledge
+// ===============================
+app.get("/api/knowledge", (req, res) => res.send(readKnowledge()));
+app.post("/api/knowledge", (req, res) => {
+  try {
+    const { content } = req.body;
+    fs.writeFileSync(KNOWLEDGE_FILE, content ?? "", "utf8");
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
 });
 
-app.listen(PORT, () => console.log(`🚀 BHS rodando em http://localhost:${PORT}`));
+// ===============================
+// 📊 API: Stats (opcional)
+app.get("/api/stats", (req, res) => res.json(readStats()));
+app.post("/api/stats", (req, res) => {
+  try {
+    const { event } = req.body;
+    const stats = readStats();
+    stats[event] = (stats[event] || 0) + 1;
+    writeStats(stats);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+// ===============================
+// 💬 API: Chat
+// ===============================
+app.post("/api/chat", async (req, res) => {
+  try {
+    const { message, sessionId } = req.body;
+    if (!message) return res.status(400).json({ error: "Mensagem obrigatória" });
+
+    const sid = sessionId || "anon";
+    const session = conversations.get(sid) || { history: [], lastActivity: Date.now() };
+
+    // Comandos
+    const lower = message.toLowerCase();
+    if (lower.includes("/limpar")) {
+      conversations.delete(sid);
+      return res.json({ message: "Conversa limpa!" });
+    }
+    if (lower.includes("/atendente") || lower.includes("falar com humano")) {
+      return res.json({
+        message: "Escolha um departamento: Vendas, Suporte ou Financeiro.",
+        showDepartments: true
+      });
+    }
+
+    // Chamar IA
+    const reply = await callAI(message, session.history);
+
+    // Atualizar histórico
+    session.history.push({ role: "user", content: message }, { role: "assistant", content: reply });
+    session.lastActivity = Date.now();
+    // Limitar histórico (últimas 20 mensagens p/ ambos)
+    if (session.history.length > 40) session.history = session.history.slice(-40);
+    conversations.set(sid, session);
+
+    res.json({ message: reply, showDepartments: false });
+  } catch (e) {
+    console.error("❌ /api/chat erro:", e);
+    res.status(500).json({ error: "Falha ao processar mensagem." });
+  }
+});
+
+// ===============================
+// 🔎 Root & Admin
+// ===============================
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+// ===============================
+// 🚀 Start
+// ===============================
+app.listen(PORT, () => {
+  console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
+  console.log("🔑 Chaves detectadas:", {
+    GROQ: !!GROQ_API_KEY,
+    GEMINI: !!GEMINI_API_KEY,
+    HUGGINGFACE: !!HUGGINGFACE_API_KEY
+  });
+  console.log("ℹ️  Modelo atual (último que respondeu) aparece em GET /api/model");
+});

@@ -177,3 +177,68 @@
   // inicializa
   loadDepartments();
 })();
+
+// ===============
+// 📊 TRACKING AUTO
+// ===============
+async function trackEvent(event) {
+  try {
+    await fetch("/api/stats", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event })
+    });
+  } catch (err) {
+    console.warn("Falha ao gravar estatística:", err);
+  }
+}
+
+// ===============
+// 🎯 EVENTOS DO CHAT
+// ===============
+btn.addEventListener("click", () => {
+  panel.style.display = panel.style.display === "block" ? "none" : "block";
+  trackEvent("chat_aberto");
+});
+
+$send.addEventListener("click", async () => {
+  const msg = $input.value.trim();
+  if (!msg) return;
+  $input.value = "";
+  addMsg(msg, "user");
+  trackEvent("mensagem_enviada");
+  await sendMessage(msg);
+});
+
+$input.addEventListener("keypress", (e) => {
+  if (e.key === "Enter") {
+    $send.click();
+  }
+});
+
+// Reaplica os eventos de clique nos botões de departamento
+async function loadDepartments() {
+  const deps = await api("/api/departments");
+  $deps.innerHTML = deps.map(d => `
+    <button class="dep" data-id="${d.id}" data-name="${d.name}" data-type="${d.type}" data-phone="${d.phone || ''}">
+      ${d.emoji || "💬"} ${d.name}
+    </button>
+  `).join("");
+
+  $deps.querySelectorAll(".dep").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const name = btn.dataset.name;
+      const type = btn.dataset.type;
+      const phone = btn.dataset.phone;
+      trackEvent(`botao_${name}`);
+
+      if (type === "whatsapp" && phone) {
+        const url = `https://wa.me/${phone}`;
+        window.open(url, "_blank");
+        trackEvent("link_whatsapp");
+      } else {
+        sendMessage(`Quero falar com ${name}`);
+      }
+    });
+  });
+}

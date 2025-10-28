@@ -1,1 +1,6 @@
-".env" 
+node_modules/
+.env
+*.log
+.DS_Store
+departments.json
+knowledge.txt

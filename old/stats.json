@@ -1,0 +1,114 @@
+[
+  {
+    "type": "open",
+    "label": null,
+    "message": null,
+    "source": "widget",
+    "timestamp": "2025-10-28T19:14:16.646Z"
+  },
+  {
+    "type": "open",
+    "label": null,
+    "message": null,
+    "source": "widget",
+    "timestamp": "2025-10-28T19:16:57.055Z"
+  },
+  {
+    "type": "message",
+    "label": null,
+    "message": "a\\sadasd",
+    "source": "widget",
+    "timestamp": "2025-10-28T19:18:37.554Z"
+  },
+  {
+    "type": "user_message",
+    "label": null,
+    "message": "a\\sadasd",
+    "source": "widget",
+    "timestamp": "2025-10-28T19:18:37.558Z"
+  },
+  {
+    "type": "ai_response",
+    "label": "Groq",
+    "message": "Olá, sou a Isa, assistente virtual da BHS Eletrônica.\n\nPara melhor atendê-lo, gostaria de saber como posso ajudar? Você tem alguma dúvida ou precisa de informações sobre nossos produtos? \n\nVisite nosso site: <a href=\"https://www.bhseletronica.com.br\">https://www.bhseletronica.com.br</a> para conhecer nossos produtos.\n\nOu entre em contato conosco: \nTelefone de Vendas: <a href=\"https://wa.me/5511983240256\"> (11) 9 8324-0256</a> \nTelefone de Financeiro: <a href=\"https://wa.me/5511983870072\"> (11) 9 8387-0072</a> \nTelefone de Faturamento: <a href=\"https://wa.me/5511987830012\"> (11) 9 8783-0012</a> \nTelefone de Expedição: <a href=\"https://wa.me/5511987830123\"> (11) 9 8783-0123</a>",
+    "source": "backend",
+    "timestamp": "2025-10-28T19:18:38.933Z"
+  },
+  {
+    "type": "ai",
+    "label": null,
+    "message": "Olá, sou a Isa, assistente virtual da BHS Eletrônica.\n\nPara melhor atendê-lo, gostaria de saber como posso ajudar? Você tem alguma dúvida ou precisa de informações sobre nossos produtos? \n\nVisite nosso site: <a href=\"https://www.bhseletronica.com.br\">https://www.bhseletronica.com.br</a> para conhecer nossos produtos.\n\nOu entre em contato conosco: \nTelefone de Vendas: <a href=\"https://wa.me/5511983240256\"> (11) 9 8324-0256</a> \nTelefone de Financeiro: <a href=\"https://wa.me/5511983870072\"> (11) 9 8387-0072</a> \nTelefone de Faturamento: <a href=\"https://wa.me/5511987830012\"> (11) 9 8783-0012</a> \nTelefone de Expedição: <a href=\"https://wa.me/5511987830123\"> (11) 9 8783-0123</a>",
+    "source": "widget",
+    "timestamp": "2025-10-28T19:18:38.944Z"
+  },
+  {
+    "type": "message",
+    "label": null,
+    "message": "asdasdfasda",
+    "source": "widget",
+    "timestamp": "2025-10-28T19:18:41.981Z"
+  },
+  {
+    "type": "user_message",
+    "label": null,
+    "message": "asdasdfasda",
+    "source": "widget",
+    "timestamp": "2025-10-28T19:18:41.985Z"
+  },
+  {
+    "type": "ai_response",
+    "label": "Groq",
+    "message": "Parece que você digitou algo aleatório. \n\nSe você tiver alguma pergunta ou precisar de ajuda com algo específico, estou aqui para ajudar. \n\nVisite nosso site: <a href=\"https://www.bhseletronica.com.br\">https://www.bhseletronica.com.br</a> para conhecer nossos produtos.\n\nOu entre em contato conosco: \nTelefone de Vendas: <a href=\"https://wa.me/5511983240256\"> (11) 9 8324-0256</a> \n\nPara que eu possa ajudar melhor, por favor, me diga o que você precisa.",
+    "source": "backend",
+    "timestamp": "2025-10-28T19:18:42.855Z"
+  },
+  {
+    "type": "ai",
+    "label": null,
+    "message": "Parece que você digitou algo aleatório. \n\nSe você tiver alguma pergunta ou precisar de ajuda com algo específico, estou aqui para ajudar. \n\nVisite nosso site: <a href=\"https://www.bhseletronica.com.br\">https://www.bhseletronica.com.br</a> para conhecer nossos produtos.\n\nOu entre em contato conosco: \nTelefone de Vendas: <a href=\"https://wa.me/5511983240256\"> (11) 9 8324-0256</a> \n\nPara que eu possa ajudar melhor, por favor, me diga o que você precisa.",
+    "source": "widget",
+    "timestamp": "2025-10-28T19:18:42.864Z"
+  },
+  {
+    "type": "message",
+    "label": null,
+    "message": "fdsf",
+    "source": "widget",
+    "timestamp": "2025-10-28T19:18:47.337Z"
+  },
+  {
+    "type": "user_message",
+    "label": null,
+    "message": "fdsf",
+    "source": "widget",
+    "timestamp": "2025-10-28T19:18:47.340Z"
+  },
+  {
+    "type": "ai_response",
+    "label": "Groq",
+    "message": "Parece que você está digitando caracteres aleatórios novamente.\n\nSe você estiver com dificuldade em encontrar o que procura ou tiver alguma dúvida, por favor, me diga e farei o meu melhor para ajudar.\n\nVisite nosso site: <a href=\"https://www.bhseletronica.com.br\">https://www.bhseletronica.com.br</a> para conhecer nossos produtos.\n\nOu entre em contato conosco: \nTelefone de Vendas: <a href=\"https://wa.me/5511983240256\"> (11) 9 8324-0256</a> \n\nEstou aqui para ajudar!",
+    "source": "backend",
+    "timestamp": "2025-10-28T19:18:48.246Z"
+  },
+  {
+    "type": "ai",
+    "label": null,
+    "message": "Parece que você está digitando caracteres aleatórios novamente.\n\nSe você estiver com dificuldade em encontrar o que procura ou tiver alguma dúvida, por favor, me diga e farei o meu melhor para ajudar.\n\nVisite nosso site: <a href=\"https://www.bhseletronica.com.br\">https://www.bhseletronica.com.br</a> para conhecer nossos produtos.\n\nOu entre em contato conosco: \nTelefone de Vendas: <a href=\"https://wa.me/5511983240256\"> (11) 9 8324-0256</a> \n\nEstou aqui para ajudar!",
+    "source": "widget",
+    "timestamp": "2025-10-28T19:18:48.255Z"
+  },
+  {
+    "type": "open",
+    "label": null,
+    "message": null,
+    "source": "widget",
+    "timestamp": "2025-10-28T19:19:38.139Z"
+  },
+  {
+    "type": "open",
+    "label": null,
+    "message": null,
+    "source": "widget",
+    "timestamp": "2025-10-28T19:21:56.038Z"
+  }
+]

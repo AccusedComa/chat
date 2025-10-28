@@ -1,217 +1,113 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>📊 Estatísticas - BHS</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>📊 Estatísticas - BHS Eletrônica</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 <style>
-body{font-family:Segoe UI,Arial,sans-serif;background:#f5f5f5;margin:0;padding:20px}
-.container{max-width:1000px;margin:auto;background:#fff;border-radius:14px;padding:24px;box-shadow:0 6px 20px rgba(0,0,0,.08)}
-h1{margin-top:0}
-table{width:100%;border-collapse:collapse;margin-top:16px}
-th,td{border-bottom:1px solid #eee;padding:10px;text-align:left}
-th{background:#f1f1f1}
-.btn{appearance:none;border:0;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:500}
+body{font-family:Segoe UI,Arial,sans-serif;background:#f5f5f5;margin:0;padding:20px;color:#222}
+.container{max-width:960px;margin:auto;background:#fff;border-radius:14px;padding:24px;box-shadow:0 6px 20px rgba(0,0,0,.08)}
+h1{margin-top:0}canvas{max-width:100%;height:auto!important}
+.btn{border:0;border-radius:10px;padding:10px 14px;cursor:pointer;margin-top:20px}
 .btn.primary{background:#25D366;color:#fff}
-.btn.ghost{background:#f1f1f1;color:#111}
-.row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
-select{padding:8px 10px;border:1px solid #ccc;border-radius:8px}
-canvas{margin-top:12px;max-height:320px}
-.small{color:#666;font-size:13px}
-.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.btn.ghost{background:#eee}
+.row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
 </style>
 </head>
 <body>
 <div class="container">
-  <h1>📊 Estatísticas de Cliques</h1>
-
-  <div class="controls">
-    <label class="small">Período:</label>
-    <select id="period">
-      <option value="7">Últimos 7 dias</option>
-      <option value="15">Últimos 15 dias</option>
-      <option value="30">Últimos 30 dias</option>
-      <option value="all">Todo o histórico</option>
-    </select>
-
-    <label class="small">Top N (barras):</label>
-    <select id="topN">
-      <option value="10" selected>Top 10</option>
-      <option value="20">Top 20</option>
-      <option value="50">Top 50</option>
-      <option value="all">Todos</option>
-    </select>
-
-    <button class="btn ghost" id="btnRefresh">🔄 Atualizar</button>
-    <button class="btn primary" id="btnCsv">📤 Exportar CSV</button>
-    <button class="btn primary" id="btnPdf">🖨️ Gerar PDF</button>
-    <button class="btn primary" id="btnClear">🗑️ Limpar</button>
+  <div class="row">
+    <h1>📊 Estatísticas de Interações</h1>
+    <button class="btn ghost" onclick="location.href='/admin'">⬅️ Voltar</button>
   </div>
-
-  <p id="info"></p>
-
-  <canvas id="barChart"></canvas>
-  <canvas id="pieChart"></canvas>
-
-  <table id="tbl">
-    <thead><tr><th>Tipo</th><th>Nome / Mensagem</th><th>Quantidade</th><th>Último registro</th></tr></thead>
-    <tbody></tbody>
-  </table>
+  <p>Veja abaixo os <b>10 eventos mais frequentes</b> (cliques, mensagens, aberturas de chat etc.).</p>
+  <canvas id="chart" height="100"></canvas>
+  <div class="row">
+    <button id="refresh" class="btn ghost">🔄 Atualizar</button>
+    <button id="export" class="btn primary">💾 Exportar PDF</button>
+  </div>
 </div>
 
 <script>
-let fullData = [];     // resposta completa do backend (grouped)
-let filtered = [];     // após filtro por período
-let topForBar = [];    // top N para gráfico de barras
+async function loadStats() {
+  try {
+    const res = await fetch("/api/stats");
+    const data = await res.json();
+    console.log("📊 Dados recebidos de /api/stats:", data);
 
-const periodEl = document.getElementById('period');
-const topNEl = document.getElementById('topN');
-
-let barChart, pieChart;
-
-function byCountDesc(a,b){ return b.count - a.count; }
-
-function applyFilters(){
-  const days = periodEl.value;
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - (days === 'all' ? 9999 : parseInt(days)));
-
-  // filtra por período
-  filtered = fullData.filter(r=>{
-    const ts = new Date(r.timestamp || Date.now());
-    return ts >= cutoff;
-  });
-
-  // ordena por count desc
-  filtered.sort(byCountDesc);
-
-  // limita para Top N na barra
-  const topNVal = topNEl.value === 'all' ? filtered.length : parseInt(topNEl.value);
-  topForBar = filtered.slice(0, topNVal);
-}
-
-async function loadStats(){
-  const r = await fetch('/api/stats');
-  const data = await r.json();
-  fullData = (data.grouped || []).map(row => ({
-    ...row,
-    // garante timestamp válido
-    timestamp: row.timestamp || new Date().toISOString()
-  }));
-
-  applyFilters();
-  renderTable();
-  renderCharts();
-  document.getElementById('info').textContent =
-    `Registros no período: ${filtered.length} | (Período: ${periodEl.value==='all'?'histórico completo':periodEl.value+' dias'})`;
-}
-
-function renderTable(){
-  const tbody = document.querySelector('#tbl tbody');
-  tbody.innerHTML='';
-  filtered.forEach(row=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${row.type}</td><td>${row.label}</td><td>${row.count}</td><td>${new Date(row.timestamp).toLocaleString()}</td>`;
-    tbody.appendChild(tr);
-  });
-}
-
-function renderCharts(){
-  // ---- Bar (Top N) ----
-  const barLabels = topForBar.map(r=>`${r.label} (${r.type})`);
-  const barValues = topForBar.map(r=>r.count);
-
-  if(barChart) barChart.destroy();
-  const barCtx=document.getElementById('barChart').getContext('2d');
-  barChart=new Chart(barCtx,{
-    type:'bar',
-    data:{labels:barLabels,datasets:[{label:'Interações (Top N)',data:barValues,backgroundColor:'#25D366'}]},
-    options:{
-      plugins:{legend:{display:false}},
-      scales:{y:{beginAtZero:true}},
-      animation:false
+    const entries = [];
+    for (const [key, value] of Object.entries(data || {})) {
+      if (typeof value === "number") entries.push([key, value]);
+      else if (typeof value === "object" && value !== null) {
+        for (const [k, v] of Object.entries(value))
+          if (typeof v === "number") entries.push([`${key}.${k}`, v]);
+      }
     }
-  });
 
-  // ---- Pie (Top 5) ----
-  const top5 = filtered.slice(0,5);
-  const pieLabels = top5.map(r=>r.label);
-  const pieValues = top5.map(r=>r.count);
-  if(pieChart) pieChart.destroy();
-  const pieCtx=document.getElementById('pieChart').getContext('2d');
-  pieChart=new Chart(pieCtx,{
-    type:'pie',
-    data:{
-      labels:pieLabels,
-      datasets:[{data:pieValues,backgroundColor:['#25D366','#128C7E','#075E54','#34B7F1','#DCF8C6']}]
-    },
-    options:{plugins:{title:{display:true,text:'Top 5 mais clicados'}}, animation:false}
-  });
+    if (!entries.length) {
+      const ctx = document.getElementById("chart").getContext("2d");
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      ctx.font = "16px Segoe UI";
+      ctx.fillStyle = "#999";
+      ctx.fillText("Ainda não há interações registradas 😴", 40, 60);
+      return;
+    }
+
+    entries.sort((a, b) => b[1] - a[1]);
+    const top10 = entries.slice(0, 10);
+    const labels = top10.map(e => e[0]);
+    const values = top10.map(e => e[1]);
+
+    if (window.chart) window.chart.destroy();
+
+    const ctx = document.getElementById("chart").getContext("2d");
+    window.chart = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{
+          label: "Ocorrências registradas",
+          data: values,
+          backgroundColor: "#25D366",
+          borderRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          title: { display: true, text: "Eventos mais frequentes" }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { precision: 0 } }
+        }
+      }
+    });
+
+  } catch (err) {
+    console.error("❌ Erro ao carregar estatísticas:", err);
+    alert("Erro ao carregar estatísticas. Veja o console para detalhes.");
+  }
 }
 
-function exportCSV(){
-  if(!filtered.length){alert('Nenhum dado para exportar.');return;}
-  let csv='Tipo,Nome/Mensagem,Quantidade,UltimoRegistro\n';
-  filtered.forEach(r=>{
-    const line=`"${r.type}","${String(r.label||'').replace(/"/g,'""')}","${r.count}","${r.timestamp}"`;
-    csv+=line+'\n';
-  });
-  const blob=new Blob([csv],{type:'text/csv'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url;
-  a.download=`bhs-stats-${new Date().toISOString().slice(0,10)}.csv`;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
+document.getElementById("refresh").onclick = loadStats;
 
-async function exportPDF(){
-  if(!filtered.length){alert('Nenhum dado para exportar.');return;}
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({orientation:'p', unit:'pt', format:'a4'});
+document.getElementById("export").onclick = () => {
+  import('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js')
+    .then(() => html2canvas(document.querySelector(".container")))
+    .then(canvas => {
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jspdf.jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+      const width = pdf.internal.pageSize.getWidth();
+      const height = canvas.height * width / canvas.width;
+      pdf.addImage(imgData, "PNG", 0, 0, width, height);
+      pdf.save("estatisticas-bhs.pdf");
+    });
+};
 
-  // Título
-  doc.setFontSize(16);
-  doc.text('Relatório de Estatísticas - BHS', 40, 40);
-  doc.setFontSize(10);
-  doc.text(`Gerado em: ${new Date().toLocaleString()}`, 40, 60);
-  doc.text(`Período: ${periodEl.value==='all' ? 'Histórico completo' : 'Últimos '+periodEl.value+' dias'}`, 40, 76);
-
-  // Gráfico de Barras
-  const barImg = document.getElementById('barChart').toDataURL('image/png', 1.0);
-  doc.addImage(barImg, 'PNG', 40, 90, 515, 200); // largura ~515pt para caber na A4 com margens
-
-  // Gráfico de Pizza
-  const pieImg = document.getElementById('pieChart').toDataURL('image/png', 1.0);
-  doc.addImage(pieImg, 'PNG', 40, 300, 250, 200);
-
-  // Tabela (Top N)
-  const tableRows = topForBar.map(r => [r.type, r.label, r.count, new Date(r.timestamp).toLocaleString()]);
-  doc.autoTable({
-    startY: 520,
-    head: [['Tipo', 'Nome/Mensagem', 'Quantidade', 'Último registro']],
-    body: tableRows,
-    theme: 'grid',
-    styles: { fontSize: 9, cellPadding: 4 }
-  });
-
-  doc.save(`bhs-relatorio-${new Date().toISOString().slice(0,10)}.pdf`);
-}
-
-// eventos
-document.getElementById('btnRefresh').addEventListener('click', ()=>{ applyFilters(); renderTable(); renderCharts(); });
-document.getElementById('btnCsv').addEventListener('click', exportCSV);
-document.getElementById('btnPdf').addEventListener('click', exportPDF);
-document.getElementById('btnClear').addEventListener('click', async ()=>{
-  if(!confirm('Apagar todo o histórico?'))return;
-  await fetch('/api/stats',{method:'DELETE'});
-  await loadStats();
-});
-periodEl.addEventListener('change', ()=>{ applyFilters(); renderTable(); renderCharts(); });
-topNEl.addEventListener('change', ()=>{ applyFilters(); renderTable(); renderCharts(); });
-
+// inicializa
 loadStats();
 </script>
 </body>

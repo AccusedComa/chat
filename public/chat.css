@@ -1,0 +1,155 @@
+body {
+  font-family: Arial, sans-serif;
+  background: #fff;
+}
+
+/* --- Botão Flutuante --- */
+#chat-button {
+  position: fixed;
+  bottom: 25px;
+  right: 25px;
+  width: 60px;
+  height: 60px;
+  background: #25d366;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+  z-index: 9999;
+  transition: transform 0.2s;
+}
+#chat-button:hover {
+  transform: scale(1.05);
+}
+
+.whatsapp-icon {
+  width: 34px;
+  height: 34px;
+}
+.notification-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: red;
+  color: white;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: bold;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* --- Janela --- */
+#chat-container {
+  position: fixed;
+  bottom: 100px;
+  right: 30px;
+  width: 340px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  z-index: 10000;
+}
+.hidden {
+  display: none;
+}
+
+/* --- Header --- */
+.chat-header {
+  background: linear-gradient(90deg, #009c3b, #00c851);
+  color: white;
+  padding: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.chat-header button {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+/* --- Caixa de mensagens --- */
+.chat-box {
+  background: #f8f8f8;
+  padding: 10px;
+  height: 380px;
+  overflow-y: auto;
+}
+.msg {
+  max-width: 80%;
+  padding: 8px 12px;
+  margin: 5px 0;
+  border-radius: 8px;
+  word-wrap: break-word;
+}
+.msg.bot {
+  background: #ffffff;
+  border: 1px solid #eee;
+}
+.msg.user {
+  background: #dcf8c6;
+  align-self: flex-end;
+  margin-left: auto;
+}
+
+/* --- Entrada --- */
+.chat-input-area {
+  display: flex;
+  border-top: 1px solid #ddd;
+}
+.chat-input-area input {
+  flex: 1;
+  border: none;
+  padding: 10px;
+}
+.chat-input-area button {
+  background: #25d366;
+  color: white;
+  border: none;
+  padding: 0 15px;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+/* --- Menus --- */
+.menu {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.menu-title {
+  background: #25d366;
+  color: white;
+  font-weight: bold;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+.btn-ai {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.btn-dept {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 6px;
+  text-align: left;
+}
+.btn-dept:hover {
+  background: #f1f1f1;
+}

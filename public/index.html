@@ -3,298 +3,32 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chat BHS</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-
-    #chat-button {
-      position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px;
-      background: #25D366; border-radius: 50%; border: none; cursor: pointer;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 1000;
-      display: flex; align-items: center; justify-content: center; transition: all 0.3s;
-    }
-    #chat-button:hover { transform: scale(1.1); }
-    #chat-button svg { width: 32px; height: 32px; fill: white; }
-    #chat-badge {
-      position: absolute; top: -5px; right: -5px; background: #ff0000; color: white;
-      border-radius: 50%; width: 22px; height: 22px; display: flex;
-      align-items: center; justify-content: center; font-size: 12px; font-weight: bold;
-      animation: pulse 2s infinite;
-    }
-    @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
-
-    #chat-window {
-      position: fixed; bottom: 90px; right: 20px; width: 360px; height: 520px;
-      background: white; border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-      z-index: 999; display: none; flex-direction: column; overflow: hidden;
-    }
-    #chat-window.show { display: flex; animation: slideUp 0.3s ease-out; }
-    @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-
-    #chat-header {
-      background: linear-gradient(135deg, #25D366 0%, #128C7E 100%); color: white;
-      padding: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    }
-    #chat-header-left { display: flex; align-items: center; gap: 12px; }
-    #chat-header img { width: 45px; height: 45px; border-radius: 50%; background: white; padding: 8px; }
-    #chat-header-info h3 { font-size: 16px; font-weight: 600; }
-    #chat-header-info p { font-size: 12px; opacity: 0.9; }
-    #close-chat {
-      background: rgba(255,255,255,0.2); border: none; color: white;
-      width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 18px;
-      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-    }
-    #close-chat:hover { background: rgba(255,255,255,0.3); }
-
-    #chat-messages {
-      flex: 1; background: #E5DDD5; padding: 16px; overflow-y: auto;
-      display: flex; flex-direction: column; gap: 12px;
-    }
-    .message {
-      max-width: 75%; padding: 10px 14px; border-radius: 8px; font-size: 14px;
-      line-height: 1.4; position: relative; animation: messageIn 0.3s ease-out; white-space: pre-wrap;
-    }
-    @keyframes messageIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    .message.bot { background: white; align-self: flex-start; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
-    .message.user { background: #DCF8C6; align-self: flex-end; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
-    .message-time { font-size: 11px; color: #667781; margin-top: 4px; text-align: right; }
-
-    #chat-options {
-      padding: 12px 16px; background: white; display: none; flex-direction: column;
-      gap: 8px; max-height: 200px; overflow-y: auto; border-top: 1px solid #e0e0e0;
-    }
-    #chat-options.show { display: flex; }
-    .option-button {
-      background: #25D366; color: white; border: none; padding: 10px 16px;
-      border-radius: 20px; font-size: 14px; font-weight: 500; cursor: pointer;
-      transition: all 0.2s; box-shadow: 0 2px 4px rgba(37, 211, 102, 0.3);
-      display: flex; align-items: center; gap: 10px;
-    }
-    .option-button:hover { background: #20BA5A; transform: translateY(-1px); }
-    .option-emoji { font-size: 18px; }
-
-    #chat-input-area {
-      padding: 12px; background: white; border-top: 1px solid #e0e0e0;
-      display: flex; gap: 8px;
-    }
-    #chat-input {
-      flex: 1; padding: 10px 15px; border: 1px solid #e0e0e0;
-      border-radius: 24px; font-size: 14px; outline: none;
-    }
-    #chat-input:focus { border-color: #25D366; }
-    #send-button {
-      background: #25D366; border: none; color: white; width: 40px; height: 40px;
-      border-radius: 50%; cursor: pointer; display: flex; align-items: center;
-      justify-content: center; flex-shrink: 0; transition: background 0.2s;
-    }
-    #send-button:hover { background: #20BA5A; }
-    #send-button:disabled { background: #ccc; cursor: not-allowed; }
-
-    .typing-indicator {
-      display: none; align-self: flex-start; background: white;
-      padding: 10px 14px; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-    }
-    .typing-indicator.show { display: block; }
-    .typing-indicator span {
-      display: inline-block; width: 8px; height: 8px; background: #667781;
-      border-radius: 50%; margin: 0 2px; animation: typing 1.4s infinite;
-    }
-    .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
-    .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
-    @keyframes typing { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-10px); } }
-
-    @media (max-width: 480px) {
-      #chat-window { width: calc(100vw - 20px); right: 10px; bottom: 80px; height: 500px; }
-      #chat-button { right: 15px; bottom: 15px; }
-    }
-  </style>
+  <title>Assistente Virtual BHS</title>
+  <link rel="stylesheet" href="chat.css">
 </head>
 <body>
 
-  <button id="chat-button" onclick="toggleChat()">
-    <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-      <path d="M16 0C7.164 0 0 7.164 0 16c0 2.825.75 5.563 2.175 7.963L.113 30.4l6.675-1.975C9.125 30.275 12.5 31 16 31c8.836 0 16-7.164 16-16S24.836 0 16 0zm0 28c-2.5 0-4.938-.675-7.075-1.938l-.5-.3-5.038 1.5 1.538-5-.338-.538C3.075 20.563 2.25 18.325 2.25 16c0-7.588 6.162-13.75 13.75-13.75S29.75 8.412 29.75 16 23.588 29.75 16 29.75z"/>
-      <path d="M22.575 18.5c-.4-.2-2.363-1.162-2.725-1.3-.363-.137-.625-.2-.888.2-.262.4-1.012 1.3-1.237 1.563-.225.262-.45.3-.85.1-.4-.2-1.688-.625-3.213-2-.188-.188-1.15-1.325-1.3-1.7-.15-.375-.013-.575.163-.762.162-.175.4-.45.6-.675.2-.225.263-.375.4-.625.137-.25.075-.475-.038-.675-.112-.2-1.037-2.475-1.425-3.4-.375-.9-.75-.775-1.012-.788L9.438 9.2c-.263 0-.688.1-1.05.475-.363.375-1.388 1.35-1.388 3.3s1.425 3.825 1.625 4.088c.2.262 2.8 4.275 6.788 5.988.95.4 1.688.638 2.263.813.95.3 1.813.263 2.5.163.762-.113 2.363-.963 2.688-1.9.325-.938.325-1.738.225-1.9-.1-.163-.362-.263-.762-.463z"/>
-    </svg>
-    <span id="chat-badge">1</span>
-  </button>
+  <!-- Botão Flutuante -->
+  <div id="chat-button">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" alt="WhatsApp" class="whatsapp-icon">
+    <div class="notification-badge">1</div>
+  </div>
 
-  <div id="chat-window">
-    <div id="chat-header">
-      <div id="chat-header-left">
-        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2325D366'/%3E%3Ctext x='50' y='65' font-size='50' text-anchor='middle' fill='white'%3E🤖%3C/text%3E%3C/svg%3E" alt="Assistente">
-        <div id="chat-header-info">
-          <h3>Assistente Virtual BHS</h3>
-          <p>Online - Responde em minutos</p>
-        </div>
-      </div>
-      <button id="close-chat" onclick="toggleChat()">×</button>
+  <!-- Janela do Chat -->
+  <div id="chat-container" class="hidden">
+    <div class="chat-header">
+      <span><strong>Assistente Virtual BHS</strong><br><small>Online - Responde em minutos</small></span>
+      <button id="close-chat">✕</button>
     </div>
 
-    <div id="chat-messages">
-      <div class="message bot">
-        Olá, tudo bem? 👋<br>Sou a assistente virtual da BHS!
-        <div class="message-time" id="current-time"></div>
-      </div>
-      <div class="typing-indicator" id="typing">
-        <span></span><span></span><span></span>
-      </div>
-    </div>
+    <div id="chat-box" class="chat-box"></div>
 
-    <div id="chat-options"></div>
-
-    <div id="chat-input-area">
-      <input type="text" id="chat-input" placeholder="Digite sua mensagem..."
-        oninput="handleInputChange()" onkeypress="if(event.key === 'Enter') sendMessage()">
-      <button id="send-button" onclick="sendMessage()">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="22" y1="2" x2="11" y2="13"></line>
-          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-        </svg>
-      </button>
+    <div class="chat-input-area">
+      <input id="chat-input" type="text" placeholder="Digite sua mensagem...">
+      <button id="send-btn">➤</button>
     </div>
   </div>
 
-  <script>
-    const API_URL = window.location.origin;
-    let chatOpen = false, departments = [], currentMode = 'menu';
-    let sessionId = 'session-' + Date.now() + '-' + Math.random(), showingButtons = false;
-
-    async function loadDepartments() {
-      try {
-        const r = await fetch(`${API_URL}/api/departments`);
-        departments = await r.json();
-      } catch (e) { console.error('Erro:', e); }
-    }
-
-    function toggleChat() {
-      chatOpen = !chatOpen;
-      document.getElementById('chat-window').classList.toggle('show', chatOpen);
-      document.getElementById('chat-badge').style.display = chatOpen ? 'none' : 'flex';
-      if (chatOpen) setTimeout(showWelcomeMessage, 800);
-    }
-
-    function showWelcomeMessage() {
-      const typing = document.getElementById('typing');
-      typing.classList.add('show');
-      setTimeout(() => {
-        typing.classList.remove('show');
-        addMessage('bot', 'Como prefere ser atendido? 😊');
-        setTimeout(showChoiceButtons, 600);
-      }, 1500);
-    }
-
-    function showChoiceButtons() {
-      const opts = document.getElementById('chat-options');
-      opts.innerHTML = '';
-      showingButtons = true;
-      
-      const aiBtn = document.createElement('button');
-      aiBtn.className = 'option-button';
-      aiBtn.innerHTML = '<span class="option-emoji">🤖</span><span>Assistente Virtual (IA)</span>';
-      aiBtn.onclick = startAIChat;
-      
-      const humanBtn = document.createElement('button');
-      humanBtn.className = 'option-button';
-      humanBtn.innerHTML = '<span class="option-emoji">👨‍💼</span><span>Falar com Atendente</span>';
-      humanBtn.onclick = showDepartments;
-      
-      opts.appendChild(aiBtn);
-      opts.appendChild(humanBtn);
-      opts.classList.add('show');
-    }
-
-    function showDepartments() {
-      const opts = document.getElementById('chat-options');
-      opts.innerHTML = '';
-      showingButtons = true;
-      addMessage('bot', 'Com qual departamento você gostaria de falar?');
-      
-      setTimeout(() => {
-        departments.filter(d => d.type !== 'ai').forEach(dept => {
-          const btn = document.createElement('button');
-          btn.className = 'option-button';
-          btn.innerHTML = `<span class="option-emoji">${dept.emoji}</span><span>${dept.name}</span>`;
-          btn.onclick = () => redirectToWhatsApp(dept);
-          opts.appendChild(btn);
-        });
-        
-        const back = document.createElement('button');
-        back.className = 'option-button';
-        back.style.background = '#999';
-        back.innerHTML = '<span class="option-emoji">←</span><span>Voltar</span>';
-        back.onclick = () => { opts.classList.remove('show'); showingButtons = false; showChoiceButtons(); };
-        opts.appendChild(back);
-        opts.classList.add('show');
-      }, 300);
-    }
-
-    function startAIChat() {
-      currentMode = 'ai';
-      showingButtons = false;
-      document.getElementById('chat-options').classList.remove('show');
-      addMessage('bot', 'Ótimo! Estou aqui para responder suas dúvidas! 🤖\n\nO que você gostaria de saber?');
-      document.getElementById('chat-input').focus();
-    }
-
-    function handleInputChange() {
-      const input = document.getElementById('chat-input');
-      const opts = document.getElementById('chat-options');
-      if (input.value.trim() && showingButtons) opts.classList.remove('show');
-      else if (!input.value.trim() && currentMode === 'menu' && showingButtons) opts.classList.add('show');
-    }
-
-    async function sendMessage() {
-      const input = document.getElementById('chat-input');
-      const msg = input.value.trim();
-      if (!msg) return;
-      
-      if (currentMode === 'menu' && showingButtons) startAIChat();
-      if (currentMode === 'ai') {
-        addMessage('user', msg);
-        input.value = '';
-        const typing = document.getElementById('typing');
-        typing.classList.add('show');
-        
-        try {
-          const r = await fetch(`${API_URL}/api/chat`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: msg, sessionId })
-          });
-          const data = await r.json();
-          typing.classList.remove('show');
-          addMessage('bot', data.message);
-          if (data.showDepartments) {
-            currentMode = 'menu';
-            setTimeout(showDepartments, 1000);
-          }
-        } catch (e) {
-          typing.classList.remove('show');
-          addMessage('bot', 'Desculpe, tive um problema. Digite /atendente para falar com humano.');
-        }
-      }
-    }
-
-    function addMessage(sender, text) {
-      const msgs = document.getElementById('chat-messages');
-      const msg = document.createElement('div');
-      msg.className = `message ${sender}`;
-      msg.innerHTML = `${text}<div class="message-time">${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>`;
-      msgs.appendChild(msg);
-      msgs.scrollTop = msgs.scrollHeight;
-    }
-
-    function redirectToWhatsApp(dept) {
-      const msg = encodeURIComponent(`Olá! Vim do site e gostaria de falar com ${dept.name}.`);
-      addMessage('bot', `Perfeito! Redirecionando para ${dept.name}... ✅`);
-      setTimeout(() => window.open(`https://wa.me/${dept.phone}?text=${msg}`, '_blank'), 800);
-    }
-
-    document.getElementById('current-time').textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    loadDepartments();
-  </script>
-
+  <script src="chat.js"></script>
 </body>
 </html>

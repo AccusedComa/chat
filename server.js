@@ -268,6 +268,8 @@ app.get('/admin', (_req, res) => {
     <head>
       <meta charset="UTF-8">
       <title>Admin BHS</title>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
       <style>
         body { font-family: Arial; padding: 20px; }
         h2 { color: #333; }
@@ -318,9 +320,9 @@ app.get('/admin', (_req, res) => {
           if (section === 'stats') {
             const res = await fetch('/admin/stats');
             const data = await res.json();
-            let html = '<h3>Estatísticas</h3><table><tr><th>Usuário</th><th>Ação</th><th>Data</th></tr>';
+            let html = '<h3>Estatísticas</h3><table id="statsTable"><tr><th>Usuário</th><th>Ação</th><th>Data</th></tr>';
             data.forEach(l => html += '<tr><td>'+(l.user||'-')+'</td><td>'+(l.choice||l.question||'-')+'</td><td>'+l.ts+'</td></tr>');
-            html += '</table>';
+            html += '</table><button onclick="exportPDF()" style="background:#25D366;color:#fff;border:0;padding:10px 16px;border-radius:8px;margin-top:10px;cursor:pointer;">💾 Exportar PDF</button>';
             box.innerHTML = html;
           }
         }
@@ -355,6 +357,54 @@ app.get('/admin', (_req, res) => {
             body: JSON.stringify({ text: txt })
           });
           alert('Arquivo knowledge.txt atualizado!');
+        }
+
+        async function exportPDF() {
+          try {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            // Título
+            doc.setFontSize(18);
+            doc.text('Relatório de Estatísticas - BHS Eletrônica', 14, 22);
+
+            // Data do relatório
+            doc.setFontSize(10);
+            doc.text('Data: ' + new Date().toLocaleString('pt-BR'), 14, 30);
+
+            // Buscar dados das estatísticas
+            const res = await fetch('/admin/stats');
+            const data = await res.json();
+
+            if (data.length === 0) {
+              doc.setFontSize(12);
+              doc.text('Nenhuma estatística disponível.', 14, 40);
+            } else {
+              // Preparar dados para a tabela
+              const tableData = data.map(l => [
+                l.user || '-',
+                l.choice || l.question || '-',
+                new Date(l.ts).toLocaleString('pt-BR')
+              ]);
+
+              // Adicionar tabela
+              doc.autoTable({
+                startY: 35,
+                head: [['Usuário', 'Ação', 'Data']],
+                body: tableData,
+                theme: 'striped',
+                headStyles: { fillColor: [37, 211, 102] },
+                styles: { fontSize: 9 }
+              });
+            }
+
+            // Salvar PDF
+            doc.save('estatisticas-bhs-' + new Date().toISOString().split('T')[0] + '.pdf');
+            alert('PDF gerado com sucesso!');
+          } catch (err) {
+            console.error('Erro ao gerar PDF:', err);
+            alert('Erro ao gerar PDF. Verifique o console.');
+          }
         }
       </script>
     </body>

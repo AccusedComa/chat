@@ -77,33 +77,88 @@ async function callAI(messages) {
   };
 
   try {
+    if (!GROQ_KEY && !OPENAI_KEY) {
+      throw new Error('Nenhuma chave de API configurada');
+    }
+
     const url = GROQ_KEY
       ? 'https://api.groq.com/openai/v1/chat/completions'
       : 'https://api.openai.com/v1/chat/completions';
-    const r = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
-    const data = await r.json();
-    let text = data?.choices?.[0]?.message?.content?.trim() || '';
-    text = text.replace(/target=.*?">/g, '">'); // remove atributos HTML
-    const chunks = [];
-    while (text.length > 600) {
-      let cut = text.lastIndexOf('.', 600);
-      if (cut === -1) cut = 600;
-      chunks.push(text.slice(0, cut + 1));
-      text = text.slice(cut + 1);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000); // 15s timeout
+
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+
+      if (!r.ok) {
+        throw new Error(`API retornou status ${r.status}`);
+      }
+
+      const data = await r.json();
+      let text = data?.choices?.[0]?.message?.content?.trim() || '';
+
+      if (!text) {
+        throw new Error('Resposta vazia da IA');
+      }
+
+      text = text.replace(/target=.*?">/g, '">'); // remove atributos HTML
+      const chunks = [];
+      while (text.length > 600) {
+        let cut = text.lastIndexOf('.', 600);
+        if (cut === -1) cut = 600;
+        chunks.push(text.slice(0, cut + 1));
+        text = text.slice(cut + 1);
+      }
+      if (text.trim()) chunks.push(text.trim());
+      return chunks;
+    } finally {
+      clearTimeout(timeout);
     }
-    if (text.trim()) chunks.push(text.trim());
-    return chunks;
   } catch (err) {
-    console.error('IA fail', err);
+    console.error('IA fail:', err.message || err);
+    if (err.name === 'AbortError') {
+      return ['A IA demorou muito para responder. Tente novamente com uma pergunta mais curta.'];
+    }
     return ['Tive um pico de indisponibilidade nas IAs. Tente novamente em instantes.'];
   }
 }
 
 // ---------- CHAT FLOW ----------
+// Endpoint para iniciar a conversa
+app.get('/api/chat/init', (req, res) => {
+  req.session.phase = 'awaiting_name';
+  res.json({
+    reply: 'Olá, sou Isa, a assistente virtual da BHS Eletrônica. Pra começar, me diga seu nome 👇',
+    phase: 'awaiting_name'
+  });
+});
+
+// Endpoint para resetar a sessão
+app.post('/api/chat/reset', (req, res) => {
+  req.session.destroy(err => {
+    if (err) {
+      return res.status(500).json({ error: 'Erro ao resetar sessão' });
+    }
+    res.json({ ok: true, message: 'Sessão resetada com sucesso' });
+  });
+});
+
 app.post('/api/chat', async (req, res) => {
   const msg = (req.body?.message || '').trim();
   const sess = req.session;
   sess.phase = sess.phase || 'awaiting_intro';
+
+  // Validação: mensagens vazias não são permitidas (exceto comandos que começam com /)
+  if (!msg || (msg.length === 0 && !msg.startsWith('/'))) {
+    return res.json({ reply: 'Por favor, envie uma mensagem válida.', phase: sess.phase });
+  }
 
   if (sess.phase === 'awaiting_intro' || msg.toLowerCase() === 'start') {
     sess.phase = 'awaiting_name';
@@ -127,18 +182,12 @@ app.post('/api/chat', async (req, res) => {
     if (digits.length < 10 || digits.length > 11)
       return res.json({ reply: 'Ops! Envie no formato 11987654321 (somente números).', phase: 'awaiting_phone' });
 
-    if (digits.length === 10) {
-      sess.phase = 'confirm_whatsapp';
-      sess.user_phone_digits = digits;
-      return res.json({
-        reply: `Esse número ${formatBR(digits)} é WhatsApp? (Responda sim ou não)`,
-        phase: 'confirm_whatsapp'
-      });
-    }
-
     sess.user_phone_digits = digits;
-    sess.user_phone = normPhoneBR(msg);
-    sess.phase = 'choose_path';
+    sess.phase = 'confirm_whatsapp';
+    return res.json({
+      reply: `Esse número ${formatBR(digits)} é WhatsApp? (Responda sim ou não)`,
+      phase: 'confirm_whatsapp'
+    });
   }
 
   if (sess.phase === 'confirm_whatsapp') {
@@ -147,6 +196,36 @@ app.post('/api/chat', async (req, res) => {
 
     sess.user_phone = normPhoneBR(sess.user_phone_digits);
     sess.phase = 'choose_path';
+
+    const depts = readDepts();
+    const reply = `Perfeito, ${sess.user_name.split(' ')[0]}, vou te direcionar para o setor correto. Me diga o que quer fazer:`;
+    return res.json({
+      reply,
+      phase: 'choose_path',
+      options: {
+        type: 'menu',
+        items: [
+          { id: 'ai', label: '🤖 Tirar dúvidas (IA)' },
+          { id: 'human', label: '💬 Conversar via WhatsApp com...', subitems: depts }
+        ]
+      }
+    });
+  }
+
+  // Processar comandos de escolha antes de verificar a fase
+  if (msg.startsWith('/choose:dept_')) {
+    const depId = parseInt(msg.replace('/choose:dept_', ''));
+    const dep = readDepts().find(d => d.id === depId);
+    if (!dep) return res.json({ reply: 'Departamento não encontrado.' });
+
+    appendStat({ user: sess.user_name, choice: dep.name });
+    const link = `https://wa.me/${dep.phone}?text=${encodeURIComponent(`Olá, sou ${sess.user_name}. Vim pelo assistente da BHS.`)}`;
+    return res.json({ reply: `Abrindo contato com **${dep.name}** no WhatsApp...`, jumpTo: link });
+  }
+
+  if (msg === '/choose:ai') {
+    sess.phase = 'ready_ai';
+    return res.json({ reply: 'Ok, me fale o que você precisa:', phase: 'ready_ai' });
   }
 
   if (sess.phase === 'choose_path') {
@@ -163,21 +242,6 @@ app.post('/api/chat', async (req, res) => {
         ]
       }
     });
-  }
-
-  if (msg.startsWith('/choose:dept_')) {
-    const depId = parseInt(msg.replace('/choose:dept_', ''));
-    const dep = readDepts().find(d => d.id === depId);
-    if (!dep) return res.json({ reply: 'Departamento não encontrado.' });
-
-    appendStat({ user: sess.user_name, choice: dep.name });
-    const link = `https://wa.me/${dep.phone}?text=${encodeURIComponent(`Olá, sou ${sess.user_name}. Vim pelo assistente da BHS.`)}`;
-    return res.json({ reply: `Abrindo contato com **${dep.name}** no WhatsApp...`, jumpTo: link });
-  }
-
-  if (msg === '/choose:ai') {
-    sess.phase = 'ready_ai';
-    return res.json({ reply: 'Ok, me fale o que você precisa:', phase: 'ready_ai' });
   }
 
   if (sess.phase === 'ready_ai') {
